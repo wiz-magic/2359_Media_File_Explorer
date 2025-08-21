@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2359 콘텐츠 소스 탐색기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 기존 스타일 유지 */
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .file-card {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .file-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .file-card .thumbnail {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            background: #f3f4f6;
+        }
+
+        .file-card .icon-placeholder {
+            width: 100%;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        /* 북마크 버튼 스타일 */
+        .bookmark-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+
+        .bookmark-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.1);
+        }
+
+        .bookmark-btn.active {
+            color: #f59e0b;
+        }
+
+        .bookmark-btn.inactive {
+            color: #9ca3af;
+        }
+
+        /* 복사 버튼 스타일 */
+        .copy-btn {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #e5e7eb;
+        }
+
+        .copy-btn.copied {
+            background: #10b981;
+            color: white;
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+            background-color: rgba(0, 0, 0, 0.75);
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .file-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 1rem;
+            }
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-dot.scanning {
+            background-color: #f59e0b;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.ready {
+            background-color: #10b981;
+        }
+
+        .status-dot.error {
+            background-color: #ef4444;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .search-highlight {
+            background-color: #fef3c7;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        .file-type-image {
+            color: #10b981;
+        }
+
+        .file-type-video {
+            color: #ef4444;
+        }
+
+        .file-type-audio {
+            color: #f59e0b;
+        }
+
+        .file-type-document {
+            color: #3b82f6;
+        }
+
+        .file-type-other {
+            color: #6b7280;
+        }
+
+        .filter-btn {
+            font-weight: 500;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        .filter-btn:not(.active):hover {
+            background-color: #e5e7eb !important;
+        }
+
+        .filter-count {
+            font-size: 0.75rem;
+            margin-left: 0.25rem;
+            opacity: 0.8;
+        }
+
+        /* 북마크 토글 버튼 스타일 */
+        .bookmark-toggle {
+            position: relative;
+        }
+
+        .bookmark-toggle.active {
+            background-color: #f59e0b !important;
+            color: white !important;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <div id="app" class="min-h-screen"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script>console.log('2359 콘텐츠 소스 탐색기');</script>
+    <script>console.log('제작자·문의·개선점: 이인수 (마케팅)');</script>
+    <script>
+        class MediaExplorer {
+            constructor() {
+                this.sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                this.currentPath = '';
+                this.files = [];
+                this.isScanning = false;
+                this.searchTimeout = null;
+                this.API_BASE = '';
+                this.currentPreviewFile = null;
+                this.currentMediaFilter = 'all';
+                this.currentSearchQuery = '';
+                this.mediaCounts = {};
+                this.bookmarks = this.loadBookmarks(); // 북마크 로드
+                this.showBookmarksOnly = false; // 북마크만 보기 상태
+                this.init();
+            }
+
+            // 북마크 로컬 스토리지 관리 - fullPath 기준으로 변경
+            loadBookmarks() {
+                const saved = localStorage.getItem('mediaExplorerBookmarks');
+                return saved ? JSON.parse(saved) : [];
+            }
+
+            saveBookmarks() {
+                localStorage.setItem('mediaExplorerBookmarks', JSON.stringify(this.bookmarks));
+            }
+
+            toggleBookmark(fullPath) {
+                const index = this.bookmarks.indexOf(fullPath);
+                if (index > -1) {
+                    this.bookmarks.splice(index, 1);
+                } else {
+                    this.bookmarks.push(fullPath);
+                }
+                this.saveBookmarks();
+                return index === -1; // 추가되었으면 true
+            }
+
+            isBookmarked(fullPath) {
+                return this.bookmarks.includes(fullPath);
+            }
+
+            // 북마크 토글 버튼 상태 변경
+            toggleBookmarkFilter() {
+                this.showBookmarksOnly = !this.showBookmarksOnly;
+                const btn = document.getElementById('bookmarkToggle');
+                if (this.showBookmarksOnly) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+                this.searchFiles(this.currentSearchQuery);
+            }
+
+            async init() {
+                this.renderUI();
+                this.attachEventListeners();
+                await this.loadSystemInfo();
+                await this.loadRecentPaths();
+            }
+
+            renderUI() {
+                const app = document.getElementById('app');
+                app.innerHTML = `
+                    <div class="bg-white shadow-sm border-b">
+                        <div class="container mx-auto px-4 py-4">
+                            <div class="flex items-center justify-between mb-4">
+                                <h1 class="text-2xl font-bold text-gray-800">
+                                    <i class="fas fa-folder-open mr-2 text-gray-700"></i>
+                                    2359 콘텐츠 소스 탐색기
+                                    <span class="text-sm font-normal text-gray-500 ml-2" id="platformInfo"></span>
+                                </h1>
+                                <div class="flex items-center">
+                                    <span class="status-dot ready" id="statusDot"></span>
+                                    <span class="text-sm text-gray-600" id="statusText">Ready</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex gap-2 mb-4">
+                                <div class="flex-1">
+                                    <input 
+                                        type="text" 
+                                        id="folderPath" 
+                                        class="font-mono w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="폴더 경로를 입력하세요..."
+                                    />
+                                </div>
+                                <button 
+                                    id="scanBtn"
+                                    class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                    onclick="explorer.scanFolder()"
+                                >
+                                    <i class="fas fa-search mr-2"></i>스캔
+                                </button>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="text-sm text-gray-600 mr-2">빠른 접근:</label>
+                                <div id="quickPaths" class="inline-flex flex-wrap gap-2"></div>
+                            </div>
+                            
+                            <div class="flex items-center gap-4 mb-2">
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="includeSubfolders" checked class="mr-2">
+                                    <span class="text-sm">하위 폴더 포함</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <span class="text-sm mr-2">깊이:</span>
+                                    <select id="maxDepth" class="px-2 py-1 border rounded text-sm">
+                                        <option value="1">1 레벨</option>
+                                        <option value="2">2 레벨</option>
+                                        <option value="3" selected>3 레벨</option>
+                                        <option value="5">5 레벨</option>
+                                        <option value="10">10 레벨</option>
+                                    </select>
+                                </label>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-600">최근 경로:</label>
+                                <select 
+                                    id="recentPaths" 
+                                    class="flex-1 px-3 py-1 border rounded text-sm"
+                                    onchange="explorer.loadRecentPath(this.value)"
+                                >
+                                    <option value="">최근 경로 선택...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="container mx-auto px-4 py-4">
+                        <div class="bg-white rounded-lg shadow-sm p-4">
+                            <div class="relative">
+                                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                <input 
+                                    type="text" 
+                                    id="searchBox" 
+                                    class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="파일 검색... (한글 지원)"
+                                    disabled
+                                    oninput="explorer.handleSearch(this.value)"
+                                />
+                            </div>
+                            
+                            <!-- 미디어 타입 필터 + 북마크 토글 버튼 -->
+                            <div class="flex gap-2 mt-3 items-center" id="filterButtons">
+                                <button 
+                                    id="filterAll" 
+                                    class="filter-btn active px-4 py-2 rounded-lg bg-blue-500 text-white transition-colors"
+                                    onclick="explorer.setMediaFilter('all')"
+                                >
+                                    <i class="fas fa-th mr-2"></i>전체
+                                </button>
+                                <button 
+                                    id="filterImage" 
+                                    class="filter-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    onclick="explorer.setMediaFilter('image')"
+                                >
+                                    <i class="fas fa-image mr-2"></i>사진
+                                </button>
+                                <button 
+                                    id="filterVideo" 
+                                    class="filter-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    onclick="explorer.setMediaFilter('video')"
+                                >
+                                    <i class="fas fa-video mr-2"></i>영상
+                                </button>
+                                <button 
+                                    id="filterAudio" 
+                                    class="filter-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    onclick="explorer.setMediaFilter('audio')"
+                                >
+                                    <i class="fas fa-music mr-2"></i>음악
+                                </button>
+                                <button 
+                                    id="filterDocument" 
+                                    class="filter-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                    onclick="explorer.setMediaFilter('document')"
+                                >
+                                    <i class="fas fa-file-alt mr-2"></i>문서
+                                </button>
+                                
+                                <div class="ml-auto">
+                                    <button 
+                                        id="bookmarkToggle"
+                                        class="bookmark-toggle px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                        onclick="explorer.toggleBookmarkFilter()"
+                                    >
+                                        <i class="fas fa-star mr-2"></i>북마크만
+                                        <span id="bookmarkCount" class="ml-1 text-xs">(${this.bookmarks.length})</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="resultsInfo" class="mt-2 text-sm text-gray-600"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="container mx-auto px-4 pb-8">
+                        <div id="fileGrid" class="file-grid">
+                            <div class="col-span-full text-center py-12 text-gray-500">
+                                <i class="fas fa-folder-open text-6xl mb-4 text-gray-300"></i>
+                                <p class="text-lg mb-2">스캔된 폴더가 없습니다</p>
+                                <p class="text-sm">위에서 폴더 경로를 입력하고 "스캔"을 클릭하세요</p>
+                            </div>
+                        </div>
+                        
+                        <div id="loadingIndicator" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div class="bg-white rounded-lg p-6 flex flex-col items-center">
+                                <div class="spinner mb-4"></div>
+                                <p class="text-gray-700" id="loadingText">스캔 중...</p>
+                            </div>
+                        </div>
+                        
+                        <div id="previewModal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+                            <div class="bg-white rounded-lg max-w-5xl max-h-[90vh] w-full mx-4 overflow-hidden">
+                                <div class="flex items-center justify-between p-4 border-b">
+                                    <h3 id="previewTitle" class="font-semibold text-lg truncate flex items-center gap-2"></h3>
+                                    <div class="flex gap-2">
+                                        <button onclick="explorer.openInSystem()" 
+                                                class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                                                title="시스템 기본 프로그램으로 열기">
+                                            <i class="fas fa-external-link-alt mr-2"></i>파일 열기
+                                        </button>
+                                        <button onclick="explorer.closePreview()" 
+                                                class="text-gray-500 hover:text-gray-700">
+                                            <i class="fas fa-times text-xl"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="previewContent" class="p-4 overflow-auto max-h-[75vh]"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // 북마크 카운트 업데이트
+                this.updateBookmarkCount();
+            }
+
+            updateBookmarkCount() {
+                const countEl = document.getElementById('bookmarkCount');
+                if (countEl) {
+                    countEl.textContent = `(${this.bookmarks.length})`;
+                }
+            }
+
+            attachEventListeners() {
+                document.getElementById('folderPath').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.scanFolder();
+                    }
+                });
+
+                document.getElementById('previewModal').addEventListener('click', (e) => {
+                    if (e.target.id === 'previewModal') {
+                        this.closePreview();
+                    }
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        this.closePreview();
+                    }
+                });
+            }
+
+            setMediaFilter(type) {
+                this.currentMediaFilter = type;
+
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.classList.remove('bg-blue-500', 'text-white', 'active');
+                    btn.classList.add('bg-gray-200', 'text-gray-700');
+                });
+
+                const activeBtn = document.getElementById(`filter${type.charAt(0).toUpperCase() + type.slice(1)}`);
+                if (activeBtn) {
+                    activeBtn.classList.remove('bg-gray-200', 'text-gray-700');
+                    activeBtn.classList.add('bg-blue-500', 'text-white', 'active');
+                }
+
+                this.searchFiles(this.currentSearchQuery);
+            }
+
+            updateFilterCounts() {
+                if (!this.mediaCounts) return;
+
+                const filters = ['All', 'Image', 'Video', 'Audio', 'Document'];
+                filters.forEach(type => {
+                    const btn = document.getElementById(`filter${type}`);
+                    if (btn) {
+                        const count = this.mediaCounts[type.toLowerCase()] || 0;
+                        const existingCount = btn.querySelector('.filter-count');
+
+                        if (count > 0) {
+                            if (existingCount) {
+                                existingCount.textContent = `(${count})`;
+                            } else {
+                                const span = document.createElement('span');
+                                span.className = 'filter-count';
+                                span.textContent = `(${count})`;
+                                btn.appendChild(span);
+                            }
+                        }
+                    }
+                });
+            }
+
+            async loadSystemInfo() {
+                try {
+                    const response = await axios.get(`${this.API_BASE}/api/system-info`);
+                    const info = response.data;
+
+                    document.getElementById('platformInfo').textContent = `(${info.platformName})`;
+
+                    if (!document.getElementById('folderPath').value) {
+                        document.getElementById('folderPath').value = info.homeDir;
+                    }
+
+                    const quickPaths = document.getElementById('quickPaths');
+                    info.defaultPaths.slice(0, 5).forEach(path => {
+                        const btn = document.createElement('button');
+                        btn.className = 'px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-sm';
+                        btn.textContent = path.split(/[/\\]/).pop() || path;
+                        btn.title = path;
+                        btn.onclick = () => {
+                            document.getElementById('folderPath').value = path;
+                        };
+                        quickPaths.appendChild(btn);
+                    });
+                } catch (error) {
+                    console.error('Failed to load system info:', error);
+                }
+            }
+
+            async loadRecentPaths() {
+                try {
+                    const response = await axios.get(`${this.API_BASE}/api/recent-paths`);
+                    const select = document.getElementById('recentPaths');
+
+                    while (select.options.length > 1) {
+                        select.remove(1);
+                    }
+
+                    response.data.paths.forEach(path => {
+                        const option = document.createElement('option');
+                        option.value = path;
+                        option.textContent = path;
+                        select.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Failed to load recent paths:', error);
+                }
+            }
+
+            loadRecentPath(path) {
+                if (path) {
+                    document.getElementById('folderPath').value = path;
+                }
+            }
+
+            async scanFolder() {
+                const pathInput = document.getElementById('folderPath');
+                const path = pathInput.value.trim();
+
+                if (!path) {
+                    alert('폴더 경로를 입력해주세요.');
+                    return;
+                }
+
+                const includeSubfolders = document.getElementById('includeSubfolders').checked;
+                const maxDepth = parseInt(document.getElementById('maxDepth').value);
+
+                this.showLoading(true, '파일 시스템 스캔 중...');
+                this.updateStatus('scanning', '스캔 중...');
+
+                try {
+                    const response = await axios.post(`${this.API_BASE}/api/scan`, {
+                        path: path,
+                        sessionId: this.sessionId,
+                        includeSubfolders: includeSubfolders,
+                        maxDepth: maxDepth
+                    });
+
+                    if (response.data.status === 'success') {
+                        this.currentPath = path;
+                        this.mediaCounts = response.data.mediaCounts;
+                        const scanTime = response.data.scanTime;
+
+                        this.updateStatus('ready',
+                            `${response.data.totalFiles}개 파일 발견 (${scanTime}ms)`
+                        );
+
+                        pathInput.classList.remove('border-red-500', 'border-green-500');
+
+                        const searchBox = document.getElementById('searchBox');
+                        searchBox.disabled = false;
+                        searchBox.focus();
+                        searchBox.placeholder = `${response.data.totalFiles}개 파일에서 검색...`;
+
+                        this.updateFilterCounts();
+
+                        await this.loadRecentPaths();
+                        this.handleSearch('');
+                    } else {
+                        throw new Error(response.data.message || 'Scan failed');
+                    }
+                } catch (error) {
+                    console.error('Scan error:', error);
+                    this.updateStatus('error', '스캔 실패');
+                    alert('폴더 스캔 오류: ' +
+                        (error.response?.data?.message || error.message));
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            handleSearch(query) {
+                this.currentSearchQuery = query;
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.searchFiles(query);
+                }, 300);
+            }
+
+            async searchFiles(query) {
+                if (!this.currentPath) return;
+
+                try {
+                    const response = await axios.post(`${this.API_BASE}/api/search`, {
+                        query: query,
+                        sessionId: this.sessionId,
+                        mediaType: this.currentMediaFilter,
+                        bookmarkedOnly: this.showBookmarksOnly,
+                        bookmarks: this.bookmarks  // fullPath 배열 전송
+                    });
+
+                    if (response.data.status === 'success') {
+                        this.files = response.data.files;
+                        this.renderFiles(response.data.files);
+                        this.updateResultsInfo(response.data.totalResults, query);
+                    }
+                } catch (error) {
+                    console.error('Search error:', error);
+                }
+            }
+
+            renderFiles(files) {
+                const grid = document.getElementById('fileGrid');
+
+                if (files.length === 0) {
+                    grid.innerHTML = `
+                        <div class="col-span-full text-center py-12 text-gray-500">
+                            <i class="fas fa-search text-4xl mb-4"></i>
+                            <p>미디어 파일을 찾을 수 없습니다.</p>
+                            <p class="text-sm mt-2">다른 검색어를 시도하거나 다른 필터를 선택해보세요.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                grid.innerHTML = files.map((file, index) => {
+                    const icon = this.getFileIcon(file.extension);
+                    const sizeStr = this.formatFileSize(file.size);
+                    const dateStr = new Date(file.modifiedAt).toLocaleDateString();
+                    const isBookmarked = this.isBookmarked(file.fullPath);  // fullPath로 체크
+
+                    let thumbnailContent = '';
+                    if (file.thumbnailUrl) {
+                        thumbnailContent = `
+                            <img src="${file.thumbnailUrl}" 
+                                 alt="${file.filename}"
+                                 class="thumbnail"
+                                 loading="lazy">
+                        `;
+                    } else {
+                        thumbnailContent = `
+                            <div class="icon-placeholder">
+                                <i class="${icon.class} text-5xl text-white opacity-90"></i>
+                            </div>
+                        `;
+                    }
+
+                    // 파일 경로를 안전하게 이스케이프
+                    const escapedPath = file.fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+                    return `
+                        <div class="file-card bg-white rounded-lg shadow hover:shadow-lg cursor-pointer overflow-hidden relative" 
+                             title="${file.fullPath}">
+                            <button 
+                                class="bookmark-btn ${isBookmarked ? 'active' : 'inactive'}"
+                                onclick="event.stopPropagation(); explorer.handleBookmarkClick('${escapedPath}')"
+                                title="${isBookmarked ? '북마크 제거' : '북마크 추가'}">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            <div onclick="explorer.previewFile(${index})">
+                                ${thumbnailContent}
+                                <div class="p-3">
+                                    <p class="text-sm font-medium text-gray-800 truncate" title="${file.filename}">
+                                        ${file.filename}
+                                    </p>
+                                    <p class="text-xs text-gray-500 truncate" title="${file.path}">
+                                        📁 ${file.path}
+                                    </p>
+                                    <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
+                                        <span>${sizeStr}</span>
+                                        <span>${dateStr}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            handleBookmarkClick(fullPath) {
+                const added = this.toggleBookmark(fullPath);
+
+                // UI 업데이트
+                this.renderFiles(this.files);
+                this.updateBookmarkCount();
+
+                // 북마크만 보기 모드일 때 리프레시
+                if (this.showBookmarksOnly) {
+                    this.searchFiles(this.currentSearchQuery);
+                }
+            }
+
+            getFileIcon(extension) {
+                const ext = extension.toLowerCase();
+                const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'heic', 'heif', 'psd'];
+                const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'm4v', '3gp'];
+                const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'];
+                const docExts = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt'];
+
+                if (imageExts.includes(ext)) {
+                    return { class: 'fas fa-image', color: 'file-type-image' };
+                } else if (videoExts.includes(ext)) {
+                    return { class: 'fas fa-video', color: 'file-type-video' };
+                } else if (audioExts.includes(ext)) {
+                    return { class: 'fas fa-music', color: 'file-type-audio' };
+                } else if (docExts.includes(ext)) {
+                    return { class: 'fas fa-file-alt', color: 'file-type-document' };
+                } else {
+                    return { class: 'fas fa-file', color: 'file-type-other' };
+                }
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+            }
+
+            updateResultsInfo(count, query) {
+                const info = document.getElementById('resultsInfo');
+                let filterText = '';
+
+                switch (this.currentMediaFilter) {
+                    case 'image': filterText = ' (사진만)'; break;
+                    case 'video': filterText = ' (영상만)'; break;
+                    case 'audio': filterText = ' (음악만)'; break;
+                    case 'document': filterText = ' (문서만)'; break;
+                    default: filterText = '';
+                }
+
+                if (this.showBookmarksOnly) {
+                    filterText += ' [북마크]';
+                }
+
+                if (query) {
+                    info.innerHTML = `"<strong>${query}</strong>" - ${count}개 파일${filterText}`;
+                } else {
+                    info.textContent = `전체: ${count}개 파일${filterText}`;
+                }
+            }
+
+            copyToClipboard(text, buttonElement) {
+                // 구식 브라우저를 위한 폴백
+                if (!navigator.clipboard) {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    textArea.style.top = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+
+                    try {
+                        document.execCommand('copy');
+                        this.showCopySuccess(buttonElement);
+                    } catch (err) {
+                        console.error('복사 실패:', err);
+                        alert('복사에 실패했습니다. 수동으로 복사해주세요.');
+                    }
+
+                    document.body.removeChild(textArea);
+                    return;
+                }
+
+                // 모던 브라우저
+                navigator.clipboard.writeText(text).then(() => {
+                    this.showCopySuccess(buttonElement);
+                }).catch(err => {
+                    console.error('복사 실패:', err);
+                    // 폴백 시도
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    textArea.style.top = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+
+                    try {
+                        document.execCommand('copy');
+                        this.showCopySuccess(buttonElement);
+                    } catch (err2) {
+                        alert('복사에 실패했습니다. 수동으로 복사해주세요.');
+                    }
+
+                    document.body.removeChild(textArea);
+                });
+            }
+
+            showCopySuccess(buttonElement) {
+                const originalHTML = buttonElement.innerHTML;
+                buttonElement.classList.add('copied');
+                buttonElement.innerHTML = '<i class="fas fa-check"></i> 복사됨!';
+
+                setTimeout(() => {
+                    buttonElement.classList.remove('copied');
+                    buttonElement.innerHTML = originalHTML;
+                }, 2000);
+            }
+
+            async previewFile(index) {
+                const file = this.files[index];
+                if (!file) return;
+
+                this.currentPreviewFile = file;
+
+                const modal = document.getElementById('previewModal');
+                const title = document.getElementById('previewTitle');
+                const content = document.getElementById('previewContent');
+
+                const isBookmarked = this.isBookmarked(file.fullPath);  // fullPath로 체크
+
+                // 파일 경로를 안전하게 이스케이프
+                const escapedPath = file.fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+                title.innerHTML = `
+                    ${file.filename}
+                    <button 
+                        class="ml-2 text-2xl ${isBookmarked ? 'text-yellow-500' : 'text-gray-400'}"
+                        onclick="explorer.handlePreviewBookmark('${escapedPath}')"
+                        title="${isBookmarked ? '북마크 제거' : '북마크 추가'}">
+                        <i class="fas fa-star"></i>
+                    </button>
+                `;
+
+                const icon = this.getFileIcon(file.extension);
+
+                let previewHtml = '';
+
+                if (file.mediaType === 'video' && file.thumbnailUrl) {
+                    previewHtml = `
+                        <div class="text-center">
+                            <img src="${file.thumbnailUrl}" 
+                                 alt="${file.filename}"
+                                 class="max-w-full h-auto mx-auto mb-4 rounded shadow-lg"
+                                 style="max-height: 500px;">
+                            <p class="text-sm text-gray-600 mb-4">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                비디오 미리보기 (썸네일)
+                            </p>
+                        </div>
+                    `;
+                } else if (file.mediaType === 'image') {
+                    previewHtml = `
+                        <div class="text-center">
+                            <img src="${this.API_BASE}/api/serve-file?path=${encodeURIComponent(file.fullPath)}" 
+                                 alt="${file.filename}"
+                                 class="max-w-full h-auto mx-auto mb-4 rounded shadow-lg"
+                                 style="max-height: 500px;">
+                        </div>
+                    `;
+                } else {
+                    previewHtml = `
+                        <div class="text-center">
+                            <div class="text-8xl mb-4 ${icon.color}">
+                                <i class="${icon.class}"></i>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                content.innerHTML = previewHtml + `
+                    <div class="text-left bg-gray-50 rounded p-4 mt-4">
+                        <h4 class="font-semibold mb-3 text-lg">파일 정보</h4>
+                        <dl class="space-y-2">
+                            <div class="flex">
+                                <dt class="font-medium text-gray-600 w-28">파일명:</dt>
+                                <dd class="text-gray-800 break-all">${file.filename}</dd>
+                            </div>
+                            <div class="flex items-start">
+                                <dt class="font-medium text-gray-600 w-28">경로:</dt>
+                                <dd class="text-gray-800 font-mono text-xs break-all bg-gray-100 p-2 rounded flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <span id="pathText">${file.fullPath}</span>
+                                        <button 
+                                            id="copyBtn"
+                                            class="copy-btn ml-2 text-blue-500 hover:text-blue-700 flex-shrink-0"
+                                            title="경로 복사">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                </dd>
+                            </div>
+                            <div class="flex">
+                                <dt class="font-medium text-gray-600 w-28">크기:</dt>
+                                <dd class="text-gray-800">${this.formatFileSize(file.size)}</dd>
+                            </div>
+                            <div class="flex">
+                                <dt class="font-medium text-gray-600 w-28">타입:</dt>
+                                <dd class="text-gray-800">${file.type}</dd>
+                            </div>
+                            <div class="flex">
+                                <dt class="font-medium text-gray-600 w-28">수정일:</dt>
+                                <dd class="text-gray-800">
+                                    ${new Date(file.modifiedAt).toLocaleString()}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                `;
+
+                modal.classList.remove('hidden');
+
+                // 복사 버튼에 이벤트 리스너 추가
+                const copyBtn = document.getElementById('copyBtn');
+                if (copyBtn) {
+                    copyBtn.onclick = () => {
+                        this.copyToClipboard(file.fullPath, copyBtn);
+                    };
+                }
+            }
+
+            handlePreviewBookmark(fullPath) {
+                this.toggleBookmark(fullPath);
+                const fileIndex = this.files.findIndex(f => f.fullPath === fullPath);
+                if (fileIndex !== -1) {
+                    this.previewFile(fileIndex);
+                }
+                this.updateBookmarkCount();
+
+                // 리스트도 업데이트
+                if (this.showBookmarksOnly) {
+                    this.searchFiles(this.currentSearchQuery);
+                } else {
+                    this.renderFiles(this.files);
+                }
+            }
+
+            async openInSystem() {
+                if (!this.currentPreviewFile) return;
+
+                try {
+                    await axios.post(`${this.API_BASE}/api/open-file`, {
+                        path: this.currentPreviewFile.fullPath
+                    });
+                } catch (error) {
+                    console.error('Failed to open file:', error);
+                    alert('파일을 열 수 없습니다.');
+                }
+            }
+
+            closePreview() {
+                document.getElementById('previewModal').classList.add('hidden');
+                this.currentPreviewFile = null;
+            }
+
+            updateStatus(status, text) {
+                const dot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+
+                dot.className = `status-dot ${status}`;
+                statusText.textContent = text;
+            }
+
+            showLoading(show, text = '스캔 중...') {
+                const indicator = document.getElementById('loadingIndicator');
+                const loadingText = document.getElementById('loadingText');
+
+                if (show) {
+                    loadingText.textContent = text;
+                    indicator.classList.remove('hidden');
+                } else {
+                    indicator.classList.add('hidden');
+                }
+            }
+        }
+
+        let explorer;
+        document.addEventListener('DOMContentLoaded', () => {
+            explorer = new MediaExplorer();
+        });
+    </script>
+</body>
+
+</html>

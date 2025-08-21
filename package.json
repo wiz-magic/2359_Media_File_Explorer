@@ -1,0 +1,30 @@
+{
+  "name": "webapp",
+  "type": "module",
+  "scripts": {
+    "start": "node local-server.cjs",
+    "start:local": "node local-server.js",
+    "start:backend": "node server.cjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "wrangler pages dev",
+    "deploy": "npm run build && wrangler pages deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "hono": "^4.9.1",
+    "mime-types": "^3.0.1",
+    "multer": "^2.0.2",
+    "open": "^8.4.0",
+    "sharp": "^0.34.3"
+  },
+  "devDependencies": {
+    "@hono/vite-build": "^1.2.0",
+    "@hono/vite-dev-server": "^0.18.2",
+    "vite": "^6.3.5",
+    "wrangler": "^4.4.0"
+  }
+}
