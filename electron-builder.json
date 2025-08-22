@@ -1,0 +1,63 @@
+{
+  "appId": "com.mediaexplorer.app",
+  "productName": "Media File Explorer",
+  "directories": {
+    "output": "electron-dist"
+  },
+  "files": [
+    "electron-main.cjs",
+    "package.json",
+    "server.cjs",
+    "local-server.cjs",
+    "ecosystem.config.cjs",
+    "public/**/*",
+    "src/**/*",
+    "node_modules/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "ffmpeg-binaries",
+      "to": "ffmpeg",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64", "ia32"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build-assets/icon.ico",
+    "requestedExecutionLevel": "asInvoker",
+    "publisherName": "Media File Explorer"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "installerIcon": "build-assets/icon.ico",
+    "uninstallerIcon": "build-assets/icon.ico",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Media File Explorer",
+    "include": "build-assets/installer.nsh"
+  },
+  "portable": {
+    "artifactName": "MediaFileExplorer-Portable.exe"
+  },
+  "mac": {
+    "category": "public.app-category.utilities",
+    "icon": "build-assets/icon.icns",
+    "target": ["dmg", "zip"]
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "build-assets/icon.png",
+    "category": "Utility"
+  }
+}
