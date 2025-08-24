@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media File Explorer - 로딩</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            font-size: 72px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .loading-bar {
+            width: 300px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 0 auto 20px;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: white;
+            border-radius: 2px;
+            animation: loading 2s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        .status {
+            font-size: 14px;
+            opacity: 0.8;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+
+        .features {
+            position: absolute;
+            bottom: 40px;
+            display: flex;
+            gap: 40px;
+            opacity: 0.7;
+            font-size: 12px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📂</div>
+        <h1>Media File Explorer</h1>
+        <p class="subtitle">미디어 파일 관리의 새로운 경험</p>
+        
+        <div class="loading-bar">
+            <div class="loading-progress"></div>
+        </div>
+        
+        <p class="status">서버를 시작하는 중입니다...</p>
+    </div>
+
+    <div class="features">
+        <div class="feature">
+            <span class="feature-icon">🔍</span>
+            <span>빠른 검색</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">🖼️</span>
+            <span>썸네일 미리보기</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">🎬</span>
+            <span>비디오 지원</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">📁</span>
+            <span>폴더 탐색</span>
+        </div>
+    </div>
+
+    <script>
+        // 상태 메시지 업데이트
+        const statusMessages = [
+            '서버를 시작하는 중입니다...',
+            '필요한 모듈을 로드하는 중입니다...',
+            '데이터베이스를 초기화하는 중입니다...',
+            '거의 완료되었습니다...'
+        ];
+
+        let messageIndex = 0;
+        const statusElement = document.querySelector('.status');
+
+        setInterval(() => {
+            messageIndex = (messageIndex + 1) % statusMessages.length;
+            statusElement.textContent = statusMessages[messageIndex];
+        }, 2000);
+    </script>
+</body>
+</html>

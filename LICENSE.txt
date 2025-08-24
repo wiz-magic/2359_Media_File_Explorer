@@ -1,0 +1,18 @@
+Media File Explorer 라이선스
+
+Copyright (c) 2024 Media Explorer Team
+
+본 소프트웨어는 무료로 제공되며, 다음 조건 하에 사용할 수 있습니다:
+
+1. 개인 및 상업적 용도로 자유롭게 사용 가능
+2. 소스 코드 수정 및 재배포 가능
+3. 원저작자 표시 필요
+
+포함된 제3자 소프트웨어:
+- Node.js: MIT License (https://nodejs.org)
+- FFmpeg: LGPL/GPL License (https://ffmpeg.org)
+- 기타 npm 패키지들: 각각의 라이선스 참조
+
+본 소프트웨어는 "있는 그대로" 제공되며, 어떠한 명시적 또는 묵시적 보증도 하지 않습니다.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
