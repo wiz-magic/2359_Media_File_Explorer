@@ -3,13 +3,47 @@
 
 컴퓨터의 모든 미디어 파일을 쉽게 검색하고 미리보기할 수 있는 프로그램입니다.
 
-## 🚀 빠른 시작
+## 🚀 **처음 사용하는 Windows 사용자 가이드**
 
-### Windows 사용자
-1. `install-windows.bat` 더블클릭
-2. 설치 완료 후 바탕화면의 'Media File Explorer' 아이콘 클릭
+### 📥 **1단계: 다운로드**
+1. GitHub 페이지에서 **초록색 "Code" 버튼** 클릭
+2. **"Download ZIP"** 클릭
+3. 다운로드한 ZIP 파일 압축 해제
 
-### Mac 사용자  
+### 🎯 **2단계: EXE 파일 생성 (원클릭!)**
+압축 해제한 폴더에서:
+
+**`build-electron-auto.bat` 더블클릭** ⭐
+
+→ 이 파일 하나만 클릭하면 모든 것이 자동으로 처리됩니다!
+
+### ✨ **자동 처리되는 과정:**
+- ✅ Node.js 자동 설치 (필요시)
+- ✅ 필요한 패키지 자동 설치  
+- ✅ 완전 독립형 EXE 파일 생성
+- ✅ Python 설치 불필요!
+
+### 📦 **결과:**
+`electron/dist/` 폴더에 생성됩니다:
+- **설치 프로그램**: `Media File Explorer Setup 1.0.0.exe`
+- **포터블 버전**: `MediaExplorer-Portable-1.0.0.exe`
+
+---
+
+## 🔧 **다른 빌드 옵션** (고급 사용자)
+
+| 파일명 | 설명 | 권장도 |
+|--------|------|--------|
+| `build-electron-auto.bat` | 완전 자동화 (Node.js 자동 설치) | ⭐⭐⭐ |
+| `build-electron-exe.bat` | 기본 Electron 빌드 | ⭐⭐ |
+| `build_windows_exe.bat` | PyInstaller 빌드 (Python 필요) | ⭐ |
+| `check-nodejs.bat` | Node.js 상태 진단 도구 | 🔍 |
+
+---
+
+## 🎮 **기존 사용자 (개발 모드)**
+
+### Mac/Linux 사용자  
 1. 터미널에서 `./install-mac.sh` 실행
 2. `./start.sh` 실행
 
