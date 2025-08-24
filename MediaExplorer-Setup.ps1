@@ -106,7 +106,7 @@ if (Test-Path "C:\ffmpeg\bin\ffmpeg.exe") {
     Write-Host "    FFmpeg already installed" -ForegroundColor Green
 } else {
     Write-Host "    Installing FFmpeg..." -ForegroundColor Yellow
-    $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip"
+    $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     $ffmpegZip = Join-Path $installDir "ffmpeg.zip"
     
     if (Download-File $ffmpegUrl $ffmpegZip) {
@@ -131,11 +131,14 @@ if (Test-Path "C:\ffmpeg\bin\ffmpeg.exe") {
             
             Write-Host "    FFmpeg installation completed!" -ForegroundColor Green
         }
+    } else {
+        Write-Host "    FFmpeg download failed, skipping..." -ForegroundColor Yellow
     }
 }
 
 # Install project dependencies
 Write-Host "[4/4] Installing project dependencies..." -ForegroundColor Cyan
+Set-Location $PSScriptRoot  # Ensure we're in the correct directory
 if (-not (Test-Path "node_modules")) {
     Write-Host "    Installing npm packages..." -ForegroundColor Yellow
     & npm install

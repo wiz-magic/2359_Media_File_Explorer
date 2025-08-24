@@ -82,30 +82,35 @@ if %errorlevel% neq 0 (
 echo [3/4] Installing FFmpeg...
 if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
     echo   Downloading FFmpeg...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip' -OutFile '%INSTALL_DIR%\ffmpeg.zip'}"
+    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip' -OutFile '%INSTALL_DIR%\ffmpeg.zip' } catch { Write-Host 'FFmpeg download failed' }}"
     
-    echo   Extracting FFmpeg...
-    powershell -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
-    
-    :: Move to C:\ffmpeg
-    if not exist "C:\ffmpeg" mkdir "C:\ffmpeg"
-    for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
-        xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
+    if exist "%INSTALL_DIR%\ffmpeg.zip" (
+        echo   Extracting FFmpeg...
+        powershell -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
+        
+        :: Move to C:\ffmpeg
+        if not exist "C:\ffmpeg" mkdir "C:\ffmpeg"
+        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
+            xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
+        )
+        
+        :: Add to PATH permanently
+        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH') do set "CURRENT_PATH=%%j"
+        echo %CURRENT_PATH% | find "C:\ffmpeg\bin" >nul
+        if errorlevel 1 (
+            reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul
+        )
+        set "PATH=%PATH%;C:\ffmpeg\bin"
+    ) else (
+        echo   FFmpeg download failed, skipping...
     )
-    
-    :: Add to PATH permanently
-    for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH') do set "CURRENT_PATH=%%j"
-    echo %CURRENT_PATH% | find "C:\ffmpeg\bin" >nul
-    if errorlevel 1 (
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul
-    )
-    set "PATH=%PATH%;C:\ffmpeg\bin"
 ) else (
     echo   FFmpeg already installed
 )
 
 :: Install project dependencies
 echo [4/4] Installing project dependencies...
+cd /d "%~dp0"
 if not exist "node_modules" (
     echo   Installing npm packages...
     call npm install
