@@ -3,52 +3,47 @@
 
 컴퓨터의 모든 미디어 파일을 쉽게 검색하고 미리보기할 수 있는 프로그램입니다.
 
-## 🚀 **처음 사용하는 Windows 사용자 가이드**
+## 🚀 **Windows 사용자 - 원클릭 설치!**
 
 ### 📥 **1단계: 다운로드**
-1. GitHub 페이지에서 **초록색 "Code" 버튼** 클릭
-2. **"Download ZIP"** 클릭
-3. 다운로드한 ZIP 파일 압축 해제
+1. GitHub에서 **"Code" → "Download ZIP"** 클릭
+2. ZIP 파일 압축 해제
 
-### 🎯 **2단계: EXE 파일 생성 (원클릭!)**
-압축 해제한 폴더에서 아래 중 하나를 더블클릭:
+### 🎯 **2단계: 자동 설치 및 실행**
+압축 해제한 폴더에서 **하나만** 더블클릭:
 
-**`START-HERE-WINDOWS.bat`** ⭐⭐⭐ (가장 쉬움)
-→ 메뉴에서 선택할 수 있는 가이드
+#### **방법 1: PowerShell (권장)**
+**`MediaExplorer-Setup.ps1`** 우클릭 → **"PowerShell로 실행"**
 
-**`build-electron-simple.bat`** ⭐⭐ (권장)
-→ 단계별 안내와 함께 자동 빌드
+#### **방법 2: 배치 파일**  
+**`MediaExplorer-OneClick-Install.bat`** 더블클릭
 
-### ✨ **자동 처리되는 과정:**
-- ✅ Node.js 자동 설치 (필요시)
-- ✅ 필요한 패키지 자동 설치  
-- ✅ 완전 독립형 EXE 파일 생성
-- ✅ Python 설치 불필요!
+### ✨ **자동으로 처리되는 모든 것:**
+- ✅ **Node.js 자동 설치** (필요시)
+- ✅ **Python 자동 설치** (필요시)  
+- ✅ **FFmpeg 자동 설치** (비디오 썸네일용)
+- ✅ **모든 패키지 자동 설치**
+- ✅ **바탕화면 바로가기 생성**
+- ✅ **브라우저에서 자동 실행** (http://localhost:3000)
 
-### 📦 **결과:**
-`electron/dist/` 폴더에 생성됩니다:
-- **설치 프로그램**: `Media File Explorer Setup 1.0.0.exe`
-- **포터블 버전**: `MediaExplorer-Portable-1.0.0.exe`
-
----
-
-## 🔧 **다른 빌드 옵션** (고급 사용자)
-
-| 파일명 | 설명 | 권장도 |
-|--------|------|--------|
-| `START-HERE-WINDOWS.bat` | 메뉴 선택형 시작 가이드 | ⭐⭐⭐ |
-| `build-electron-simple.bat` | 단계별 안내 자동 빌드 | ⭐⭐⭐ |
-| `build-electron-auto.bat` | 완전 자동화 (고급 사용자) | ⭐⭐ |
-| `build_windows_exe.bat` | PyInstaller 빌드 (Python 필요) | ⭐ |
-| `check-nodejs.bat` | Node.js 상태 진단 도구 | 🔍 |
+### 🎉 **완료!**
+설치 후 **바탕화면의 "Media File Explorer"** 아이콘을 클릭하면 바로 실행됩니다!
 
 ---
 
-## 🎮 **기존 사용자 (개발 모드)**
+## 🎮 **개발자/Mac/Linux 사용자**
 
-### Mac/Linux 사용자  
-1. 터미널에서 `./install-mac.sh` 실행
-2. `./start.sh` 실행
+### Mac/Linux  
+```bash
+./install-mac.sh
+./start.sh
+```
+
+### 수동 설치
+```bash
+npm install
+npm start
+```
 
 
 VIDEO THUMBNAILS (Optional):
