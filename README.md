@@ -11,11 +11,13 @@
 3. 다운로드한 ZIP 파일 압축 해제
 
 ### 🎯 **2단계: EXE 파일 생성 (원클릭!)**
-압축 해제한 폴더에서:
+압축 해제한 폴더에서 아래 중 하나를 더블클릭:
 
-**`build-electron-auto.bat` 더블클릭** ⭐
+**`START-HERE-WINDOWS.bat`** ⭐⭐⭐ (가장 쉬움)
+→ 메뉴에서 선택할 수 있는 가이드
 
-→ 이 파일 하나만 클릭하면 모든 것이 자동으로 처리됩니다!
+**`build-electron-simple.bat`** ⭐⭐ (권장)
+→ 단계별 안내와 함께 자동 빌드
 
 ### ✨ **자동 처리되는 과정:**
 - ✅ Node.js 자동 설치 (필요시)
@@ -34,8 +36,9 @@
 
 | 파일명 | 설명 | 권장도 |
 |--------|------|--------|
-| `build-electron-auto.bat` | 완전 자동화 (Node.js 자동 설치) | ⭐⭐⭐ |
-| `build-electron-exe.bat` | 기본 Electron 빌드 | ⭐⭐ |
+| `START-HERE-WINDOWS.bat` | 메뉴 선택형 시작 가이드 | ⭐⭐⭐ |
+| `build-electron-simple.bat` | 단계별 안내 자동 빌드 | ⭐⭐⭐ |
+| `build-electron-auto.bat` | 완전 자동화 (고급 사용자) | ⭐⭐ |
 | `build_windows_exe.bat` | PyInstaller 빌드 (Python 필요) | ⭐ |
 | `check-nodejs.bat` | Node.js 상태 진단 도구 | 🔍 |
 

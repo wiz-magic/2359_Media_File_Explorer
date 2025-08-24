@@ -1,6 +1,5 @@
 @echo off
-chcp 65001 > nul
-title 🚀 Media File Explorer - Quick Start
+title Media File Explorer - Quick Start
 
 echo.
 echo ================================================================

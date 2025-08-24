@@ -1,18 +1,19 @@
 @echo off
-chcp 65001 > nul
-title Media Explorer - 자동 설치 및 빌드
+title Media Explorer Auto Build
+cls
 
 echo ================================================================
-echo     Media File Explorer - 자동 설치 및 빌드
+echo     Media File Explorer - Auto Build System
 echo ================================================================
 echo.
-echo 이 스크립트는 모든 것을 자동으로 처리합니다:
-echo   ✅ Node.js 설치 상태 확인
-echo   ✅ 필요 시 Node.js 자동 다운로드 및 설치
-echo   ✅ Electron 앱 자동 빌드
-echo   ✅ 완전한 독립 실행형 exe 생성
+echo This script will automatically handle everything:
+echo   * Check Node.js installation status
+echo   * Auto download and install Node.js if needed
+echo   * Auto build Electron app
+echo   * Generate standalone exe files
 echo.
-pause
+echo Press any key to continue...
+pause >nul
 
 :: 관리자 권한 확인
 echo.
@@ -20,17 +21,17 @@ echo [0/6] 관리자 권한 확인 중...
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
-    echo ⚠️  관리자 권한이 필요합니다!
+    echo WARNING: Administrator privileges required!
     echo.
-    echo 해결 방법:
-    echo   1. 이 파일에 마우스 우클릭
-    echo   2. "관리자 권한으로 실행" 선택
-    echo   3. UAC 창에서 "예" 클릭
+    echo Solution:
+    echo   1. Right-click this file
+    echo   2. Select "Run as administrator"
+    echo   3. Click "Yes" in UAC dialog
     echo.
     pause
     exit /b 1
 )
-echo ✅ 관리자 권한 확인됨
+echo [OK] Administrator privileges confirmed
 
 :: 임시 다운로드 폴더 생성
 set "TEMP_DIR=%TEMP%\media-explorer-build"
@@ -38,7 +39,7 @@ if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%"
 
 :: Node.js 확인 및 설치
 echo.
-echo [1/6] Node.js 확인 중...
+echo [1/6] Checking Node.js...
 
 node --version >nul 2>&1
 if %errorlevel% equ 0 (

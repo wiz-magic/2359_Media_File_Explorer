@@ -1,6 +1,5 @@
 @echo off
-chcp 65001 > nul
-title 🚀 Media File Explorer - 처음 사용자 가이드
+title Media File Explorer - Korean Guide
 
 echo.
 echo ================================================================
