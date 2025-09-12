@@ -23,13 +23,16 @@ if exist "%~dp0\.installed" (
     goto start_app
 )
 
-:: Request admin privileges
-echo Requesting administrator privileges...
+:: Check for admin privileges (optional for better installation)
+echo Checking system permissions...
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo This requires administrator access to install software.
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
-    exit /b
+    echo [INFO] Running without administrator privileges.
+    echo [INFO] Some features may require manual setup, but installation will continue.
+    set "NO_ADMIN=1"
+) else (
+    echo [OK] Administrator access available.
+    set "NO_ADMIN=0"
 )
 
 echo [OK] Administrator access granted
@@ -87,29 +90,48 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
     echo   Extracting FFmpeg...
     powershell -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
     
-    :: Move to C:\ffmpeg
-    if not exist "C:\ffmpeg" mkdir "C:\ffmpeg"
-    for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
-        xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
-    )
-    
-    :: Add to PATH permanently (improved error handling)
-    echo   Configuring FFmpeg PATH...
-    for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
-    if defined CURRENT_PATH (
-        echo %CURRENT_PATH% | find /i "C:\ffmpeg\bin" >nul
-        if errorlevel 1 (
-            reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul 2>&1
+    :: Install FFmpeg to user directory if no admin rights
+    if "%NO_ADMIN%"=="1" (
+        echo   Installing FFmpeg to user directory...
+        set "FFMPEG_DIR=%USERPROFILE%\ffmpeg"
+        if not exist "%FFMPEG_DIR%" mkdir "%FFMPEG_DIR%"
+        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
+            xcopy "%%i\*" "%FFMPEG_DIR%\" /E /I /Y >nul 2>&1
         )
+        set "PATH=%PATH%;%FFMPEG_DIR%\bin"
+        echo   FFmpeg installed to: %FFMPEG_DIR%
+    ) else (
+        echo   Installing FFmpeg to system directory...
+        if not exist "C:\ffmpeg" mkdir "C:\ffmpeg" 2>nul
+        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
+            xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
+        )
+        
+        :: Add to system PATH if admin
+        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
+        if defined CURRENT_PATH (
+            echo %CURRENT_PATH% | find /i "C:\ffmpeg\bin" >nul || (
+                reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul 2>&1
+            )
+        )
+        set "PATH=%PATH%;C:\ffmpeg\bin"
     )
     
-    :: Also add to user PATH for immediate availability  
+    :: Add to user PATH regardless of admin status
     reg query "HKCU\Environment" /v PATH >nul 2>&1
     if errorlevel 1 (
-        reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul 2>&1
+        if "%NO_ADMIN%"=="1" (
+            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%FFMPEG_DIR%\bin" /f >nul 2>&1
+        ) else (
+            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul 2>&1
+        )
     ) else (
         for /f "tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH 2^>nul') do (
-            if defined %%j (
+            if "%NO_ADMIN%"=="1" (
+                echo %%j | find /i "%FFMPEG_DIR%\bin" >nul || (
+                    reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;%FFMPEG_DIR%\bin" /f >nul 2>&1
+                )
+            ) else (
                 echo %%j | find /i "C:\ffmpeg\bin" >nul || (
                     reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;C:\ffmpeg\bin" /f >nul 2>&1
                 )
@@ -117,8 +139,23 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
         )
     )
     
-    :: Set for current session
-    set "PATH=%PATH%;C:\ffmpeg\bin"
+    :: Test FFmpeg installation
+    echo   Testing FFmpeg installation...
+    if "%NO_ADMIN%"=="1" (
+        "%FFMPEG_DIR%\bin\ffmpeg.exe" -version >nul 2>&1
+        if not errorlevel 1 (
+            echo   [SUCCESS] FFmpeg is working! (User installation)
+        ) else (
+            echo   [INFO] FFmpeg installed to user directory - may need terminal restart
+        )
+    ) else (
+        "C:\ffmpeg\bin\ffmpeg.exe" -version >nul 2>&1
+        if not errorlevel 1 (
+            echo   [SUCCESS] FFmpeg is working! (System installation)
+        ) else (
+            echo   [INFO] FFmpeg installed to system - may need terminal restart
+        )
+    )
     
     :: Test FFmpeg installation
     echo   Testing FFmpeg...
