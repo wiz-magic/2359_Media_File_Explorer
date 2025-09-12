@@ -20,8 +20,12 @@ echo Just wait and it will open in your browser automatically!
 echo.
 pause
 
+:: Jump to main start to avoid falling into helper labels
+goto :start
+
 :: Resolve absolute paths for system tools (no PATH dependency)
 set "SR=%SystemRoot%"
+if "%SR%"=="" set "SR=C:\Windows"
 set "PWSH=%SR%\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "PWSH7=%ProgramFiles%\PowerShell\7\pwsh.exe"
 set "CURL=%SR%\System32\curl.exe"
@@ -32,6 +36,10 @@ set "TIMEOUT_EXE=%SR%\System32\timeout.exe"
 set "REGEXE=%SR%\System32\reg.exe"
 set "TAR=%SR%\System32\tar.exe"
 set "CMD=%SR%\System32\cmd.exe"
+set "WHERE_EXE=%SR%\System32\where.exe"
+set "TASKLIST_EXE=%SR%\System32\tasklist.exe"
+set "TASKKILL_EXE=%SR%\System32\taskkill.exe"
+set "NET_EXE=%SR%\System32\net.exe"
 
 :: Helper: sleep %1 seconds (timeout fallback)
 :sleep_def
@@ -80,9 +88,10 @@ if %__OK%==0 if exist "%TAR%" (
 )
 endlocal & (if %__OK%==1 (exit /b 0) else (exit /b 1))
 
+:start
 :: Check for admin privileges (affects FFmpeg system PATH)
 echo Checking system permissions...
-net session >nul 2>&1
+"%NET_EXE%" session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [INFO] Running without administrator privileges.
     set "NO_ADMIN=1"
@@ -104,7 +113,7 @@ set "FFMPEG_ZIP_URL=https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7
 :: 1) Node.js (v20.18.0)
 :: ------------------------------------------------------------
 echo [1/4] Installing Node.js...
-where node >nul 2>&1
+"%WHERE_EXE%" node >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Downloading Node.js v20.18.0...
     call :download "%NODE_URL%" "%INSTALL_DIR%\node.msi"
@@ -133,7 +142,7 @@ if not exist "%NPM%" set "NPM=npm"
 :: 2) Python (3.12.4)
 :: ------------------------------------------------------------
 echo [2/4] Installing Python...
-where python >nul 2>&1
+"%WHERE_EXE%" python >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Downloading Python 3.12.4...
     call :download "%PY_URL%" "%INSTALL_DIR%\python.exe"
@@ -154,7 +163,7 @@ if %errorlevel% neq 0 (
 :: 3) FFmpeg (prefer Winget, fallback to portable)
 :: ------------------------------------------------------------
 echo [3/4] Installing FFmpeg...
-where ffmpeg >nul 2>&1
+"%WHERE_EXE%" ffmpeg >nul 2>&1
 if %errorlevel%==0 (
     echo   FFmpeg already installed
 ) else (
@@ -248,7 +257,7 @@ echo ================================================================
 echo.
 
 :: Kill any existing Node processes (best-effort)
-taskkill /F /IM node.exe >nul 2>&1
+"%TASKKILL_EXE%" /F /IM node.exe >nul 2>&1
 
 echo Starting server...
 :: Use npm path directly to avoid PATH issues
@@ -269,7 +278,7 @@ echo.
 
 :monitor
 call :sleep_def 5
-tasklist /FI "IMAGENAME eq node.exe" 2>NUL | find /I /N "node.exe" >nul
+"%TASKLIST_EXE%" /FI "IMAGENAME eq node.exe" 2>NUL | find /I /N "node.exe" >nul
 if "%ERRORLEVEL%"=="0" (
     goto monitor
 ) else (
