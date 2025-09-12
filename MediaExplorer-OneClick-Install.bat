@@ -94,35 +94,44 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
             xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
         )
         
-        :: Add to PATH permanently (improved)
-        echo   Adding FFmpeg to system PATH...
-        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
-        if defined CURRENT_PATH (
-            echo %CURRENT_PATH% | find "C:\ffmpeg\bin" >nul
-            if errorlevel 1 (
-                reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul
-                if not errorlevel 1 echo   Successfully added to system PATH
-            ) else (
-                echo   Already in system PATH
+        :: Configure FFmpeg PATH properly
+        echo   Configuring FFmpeg PATH...
+        
+        :: Add to system PATH permanently
+        for /f "skip=2 tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do (
+            echo %%j | find /i "C:\ffmpeg\bin" >nul || (
+                reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;C:\ffmpeg\bin" /f >nul 2>&1
             )
         )
         
-        :: Also add to user PATH as backup
-        for /f "tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH 2^>nul') do set "USER_PATH=%%j"
-        if defined USER_PATH (
-            echo %USER_PATH% | find "C:\ffmpeg\bin" >nul
-            if errorlevel 1 (
-                reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%USER_PATH%;C:\ffmpeg\bin" /f >nul
-            )
+        :: Add to user PATH as well for immediate availability
+        reg query "HKCU\Environment" /v PATH >nul 2>&1
+        if errorlevel 1 (
+            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul 2>&1
         ) else (
-            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul
+            for /f "skip=2 tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH') do (
+                echo %%j | find /i "C:\ffmpeg\bin" >nul || (
+                    reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;C:\ffmpeg\bin" /f >nul 2>&1
+                )
+            )
         )
         
-        :: Set for current session
+        :: Update current session PATH immediately
         set "PATH=%PATH%;C:\ffmpeg\bin"
         
-        :: Broadcast environment change
-        powershell -Command "[Environment]::SetEnvironmentVariable('TEMP_REFRESH', [Environment]::GetEnvironmentVariable('TEMP_REFRESH', 'User'), 'User')" >nul 2>&1
+        :: Force environment refresh using multiple methods
+        echo   Refreshing environment variables...
+        setx FFMPEG_REFRESH "1" >nul 2>&1
+        setx FFMPEG_REFRESH "" >nul 2>&1
+        
+        :: Test FFmpeg immediately
+        echo   Testing FFmpeg installation...
+        "C:\ffmpeg\bin\ffmpeg.exe" -version >nul 2>&1
+        if not errorlevel 1 (
+            echo   [SUCCESS] FFmpeg is working correctly!
+        ) else (
+            echo   [WARNING] FFmpeg may need system restart to work properly
+        )
     ) else (
         echo   FFmpeg download failed, skipping...
     )
@@ -130,20 +139,69 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
     echo   FFmpeg already installed
 )
 
-:: Install project dependencies
+:: Final environment refresh before npm install
 echo [4/4] Installing project dependencies...
 cd /d "%~dp0"
+
+:: Update PATH for current session from registry
+echo   Refreshing PATH from registry...
+for /f "skip=2 tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "SYSTEM_PATH=%%j"
+for /f "skip=2 tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH 2^>nul') do set "USER_PATH=%%j"
+if defined USER_PATH (
+    set "PATH=%SYSTEM_PATH%;%USER_PATH%"
+) else (
+    set "PATH=%SYSTEM_PATH%;C:\ffmpeg\bin"
+)
+
+:: Install npm packages
 if not exist "node_modules" (
     echo   Installing npm packages...
     call npm install
 )
 
-:: Verify installations
+:: Final verification with detailed status
 echo.
-echo Verifying installations...
-node --version >nul 2>&1 && echo   [OK] Node.js is working || echo   [!] Node.js may need terminal restart
-python --version >nul 2>&1 && echo   [OK] Python is working || echo   [!] Python may need terminal restart
-C:\ffmpeg\bin\ffmpeg.exe -version >nul 2>&1 && echo   [OK] FFmpeg is working || echo   [!] FFmpeg may need terminal restart
+echo ================================================================
+echo                   Installation Verification
+echo ================================================================
+echo.
+
+:: Test Node.js
+echo Testing Node.js...
+node --version >nul 2>&1
+if not errorlevel 1 (
+    for /f "tokens=*" %%i in ('node --version') do echo   [✓] Node.js %%i - Ready
+) else (
+    echo   [!] Node.js - May need new terminal to work
+)
+
+:: Test Python  
+echo Testing Python...
+python --version >nul 2>&1
+if not errorlevel 1 (
+    for /f "tokens=*" %%i in ('python --version') do echo   [✓] Python %%i - Ready
+) else (
+    echo   [!] Python - May need new terminal to work
+)
+
+:: Test FFmpeg with direct path and PATH
+echo Testing FFmpeg...
+"C:\ffmpeg\bin\ffmpeg.exe" -version >nul 2>&1
+if not errorlevel 1 (
+    echo   [✓] FFmpeg - Ready (Direct Path)
+    ffmpeg -version >nul 2>&1
+    if not errorlevel 1 (
+        echo   [✓] FFmpeg - Ready (PATH)
+    ) else (
+        echo   [!] FFmpeg - Working but PATH may need restart
+    )
+) else (
+    echo   [✗] FFmpeg - Installation may have failed
+)
+
+echo.
+echo [INFO] If any component shows warnings, restart your computer
+echo       and the components will work in new terminals.
 
 :: Mark as installed
 echo Installation completed successfully > "%~dp0\.installed"
@@ -154,6 +212,13 @@ echo ================================================================
 echo                 Starting Media File Explorer
 echo ================================================================
 echo.
+
+:: Quick FFmpeg availability check before starting
+if exist "C:\ffmpeg\bin\ffmpeg.exe" (
+    echo FFmpeg Status: Available
+) else (
+    echo FFmpeg Status: Not found - Video features may be limited
+)
 
 :: Kill any existing processes
 taskkill /F /IM node.exe >nul 2>&1
