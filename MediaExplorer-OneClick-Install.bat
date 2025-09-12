@@ -1,6 +1,9 @@
 @echo off
-title Media Explorer - One Click Install and Run
-cls
+setlocal EnableExtensions EnableDelayedExpansion
+
+:: ================================================================
+::            Media File Explorer - One Click Setup
+:: ================================================================
 
 echo ================================================================
 echo            Media File Explorer - One Click Setup
@@ -17,29 +20,85 @@ echo Just wait and it will open in your browser automatically!
 echo.
 pause
 
-:: Check if already installed marker exists
-if exist "%~dp0\.installed" (
-    echo Previous installation found. Starting application...
-    goto start_app
-)
+:: Resolve absolute paths for system tools (no PATH dependency)
+set "SR=%SystemRoot%"
+set "PWSH=%SR%\System32\WindowsPowerShell\v1.0\powershell.exe"
+set "PWSH7=%ProgramFiles%\PowerShell\7\pwsh.exe"
+set "CURL=%SR%\System32\curl.exe"
+set "BITS=%SR%\System32\bitsadmin.exe"
+set "CERTUTIL=%SR%\System32\certutil.exe"
+set "MSIEXEC=%SR%\System32\msiexec.exe"
+set "TIMEOUT_EXE=%SR%\System32\timeout.exe"
+set "REGEXE=%SR%\System32\reg.exe"
+set "TAR=%SR%\System32\tar.exe"
+set "CMD=%SR%\System32\cmd.exe"
 
-:: Check for admin privileges (optional for better installation)
+:: Helper: sleep %1 seconds (timeout fallback)
+:sleep_def
+if "%~1"=="" (set "__SECS=5") else (set "__SECS=%~1")
+if exist "%TIMEOUT_EXE%" (
+    "%TIMEOUT_EXE%" /t %__SECS% /nobreak >nul
+) else (
+    ping 127.0.0.1 -n %__SECS% >nul
+)
+exit /b 0
+
+:: Helper: download %1=url %2=outfile
+:download
+setlocal
+set "__URL=%~1"
+set "__OUT=%~2"
+set "__OK=0"
+if exist "%PWSH%" (
+    "%PWSH%" -Command "& {[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%__URL%' -OutFile '%__OUT%'}" && set "__OK=1"
+)
+if %__OK%==0 if exist "%PWSH7%" (
+    "%PWSH7%" -NoLogo -NoProfile -Command "Invoke-WebRequest -Uri '%__URL%' -OutFile '%__OUT%'" && set "__OK=1"
+)
+if %__OK%==0 if exist "%CURL%" (
+    "%CURL%" -L -o "%__OUT%" "%__URL%" && set "__OK=1"
+)
+if %__OK%==0 if exist "%BITS%" (
+    "%BITS%" /transfer ME_DLD /priority FOREGROUND "%__URL%" "%__OUT%" && set "__OK=1"
+)
+if %__OK%==0 if exist "%CERTUTIL%" (
+    "%CERTUTIL%" -urlcache -split -f "%__URL%" "%__OUT%" >nul 2>&1 && set "__OK=1"
+)
+endlocal & (if %__OK%==1 (exit /b 0) else (exit /b 1))
+
+:: Helper: extract zip %1=zip %2=dest
+:extract_zip
+setlocal
+set "__ZIP=%~1"
+set "__DST=%~2"
+set "__OK=0"
+if exist "%PWSH%" (
+    "%PWSH%" -Command "Expand-Archive -Path '%__ZIP%' -DestinationPath '%__DST%' -Force" && set "__OK=1"
+)
+if %__OK%==0 if exist "%TAR%" (
+    "%TAR%" -xf "%__ZIP%" -C "%__DST%" && set "__OK=1"
+)
+endlocal & (if %__OK%==1 (exit /b 0) else (exit /b 1))
+
+:: Check for admin privileges (affects FFmpeg system PATH)
 echo Checking system permissions...
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [INFO] Running without administrator privileges.
-    echo [INFO] Some features may require manual setup, but installation will continue.
     set "NO_ADMIN=1"
 ) else (
     echo [OK] Administrator access available.
     set "NO_ADMIN=0"
 )
 
-echo.
-
 :: Create installation directory
 set "INSTALL_DIR=%~dp0runtime"
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
+
+:: URLs
+set "NODE_URL=https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
+set "PY_URL=https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
+set "FFMPEG_ZIP_URL=https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip"
 
 :: ------------------------------------------------------------
 :: 1) Node.js (v20.18.0)
@@ -48,19 +107,27 @@ echo [1/4] Installing Node.js...
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Downloading Node.js v20.18.0...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile '%INSTALL_DIR%\node.msi'}"
-
-    echo   Installing Node.js...
-    msiexec /i "%INSTALL_DIR%\node.msi" /quiet /norestart
-
-    echo   Waiting for installation to complete...
-    timeout /t 10 /nobreak >nul
-
-    :: Ensure PATH in this session
-    set "PATH=%PATH%;C:\Program Files\nodejs"
+    call :download "%NODE_URL%" "%INSTALL_DIR%\node.msi"
+    if errorlevel 1 (
+        echo   [ERROR] Failed to download Node.js. Please check internet connection.
+    ) else (
+        echo   Installing Node.js...
+        if exist "%MSIEXEC%" (
+            "%MSIEXEC%" /i "%INSTALL_DIR%\node.msi" /quiet /norestart
+        ) else (
+            echo   [WARN] msiexec not found. Skipping Node.js installation.
+        )
+        echo   Finalizing Node.js install...
+        call :sleep_def 10
+        set "PATH=%PATH%;C:\Program Files\nodejs"
+    )
 ) else (
     echo   Node.js already installed
 )
+
+:: Determine npm path
+set "NPM=%ProgramFiles%\nodejs\npm.cmd"
+if not exist "%NPM%" set "NPM=npm"
 
 :: ------------------------------------------------------------
 :: 2) Python (3.12.4)
@@ -69,16 +136,16 @@ echo [2/4] Installing Python...
 where python >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Downloading Python 3.12.4...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile '%INSTALL_DIR%\python.exe'}"
-
-    echo   Installing Python...
-    "%INSTALL_DIR%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-
-    echo   Waiting for installation to complete...
-    timeout /t 15 /nobreak >nul
-
-    :: Ensure PATH in this session (common default)
-    set "PATH=%PATH%;C:\Program Files\Python312;C:\Program Files\Python312\Scripts"
+    call :download "%PY_URL%" "%INSTALL_DIR%\python.exe"
+    if errorlevel 1 (
+        echo   [ERROR] Failed to download Python.
+    ) else (
+        echo   Installing Python...
+        "%INSTALL_DIR%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+        echo   Finalizing Python install...
+        call :sleep_def 15
+        set "PATH=%PATH%;C:\Program Files\Python312;C:\Program Files\Python312\Scripts"
+    )
 ) else (
     echo   Python already installed
 )
@@ -87,118 +154,72 @@ if %errorlevel% neq 0 (
 :: 3) FFmpeg (prefer Winget, fallback to portable)
 :: ------------------------------------------------------------
 echo [3/4] Installing FFmpeg...
-
-:: If FFmpeg already available in PATH, skip
 where ffmpeg >nul 2>&1
 if %errorlevel%==0 (
     echo   FFmpeg already installed
 ) else (
-    :: Try Winget first
-    where winget >nul 2>&1
-    if %errorlevel%==0 (
+    set "WINGET=%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe"
+    if not exist "%WINGET%" set "WINGET=%SR%\System32\winget.exe"
+    if exist "%WINGET%" (
         echo   Installing FFmpeg via Winget...
-        winget install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
-
-        :: Verify after Winget
+        "%WINGET%" install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
         ffmpeg -version >nul 2>&1
         if %errorlevel%==0 (
             echo   [SUCCESS] FFmpeg installed via Winget
+            goto ffmpeg_done
         ) else (
             echo   Winget installation may require a restart. Falling back to portable install...
-            goto install_ffmpeg_manual
         )
     ) else (
         echo   Winget not available. Using portable install...
-        goto install_ffmpeg_manual
+    )
+
+    echo   Downloading FFmpeg (portable)...
+    call :download "%FFMPEG_ZIP_URL%" "%INSTALL_DIR%\ffmpeg.zip"
+    if errorlevel 1 (
+        echo   [ERROR] Failed to download FFmpeg.
+    ) else (
+        echo   Extracting FFmpeg...
+        call :extract_zip "%INSTALL_DIR%\ffmpeg.zip" "%INSTALL_DIR%" || echo   [WARN] Could not extract with preferred tool. Trying tar if available.
+        
+        set "FFPORTABLE=%INSTALL_DIR%\ffmpeg_portable"
+        if not exist "%FFPORTABLE%" mkdir "%FFPORTABLE%" >nul 2>&1
+        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
+            xcopy "%%i\*" "%FFPORTABLE%\" /E /I /Y >nul 2>&1
+            goto :after_copy_ff
+        )
+        :after_copy_ff
+        if exist "%FFPORTABLE%\bin" (
+            if "%NO_ADMIN%"=="1" (
+                set "PATH=%PATH%;%FFPORTABLE%\bin"
+                if exist "%REGEXE%" (
+                    for /f "tokens=2*" %%a in ('"%REGEXE%" query "HKCU\Environment" /v PATH 2^>nul ^| find "REG_"') do (
+                        set "CURUSERPATH=%%b"
+                    )
+                    if not defined CURUSERPATH (
+                        "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%FFPORTABLE%\bin" /f >nul 2>&1
+                    ) else (
+                        echo !CURUSERPATH! | find /i "%FFPORTABLE%\bin" >nul || "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "!CURUSERPATH!;%FFPORTABLE%\bin" /f >nul 2>&1
+                    )
+                )
+            ) else (
+                if not exist "C:\ffmpeg" mkdir "C:\ffmpeg" >nul 2>&1
+                xcopy "%FFPORTABLE%\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
+                set "PATH=%PATH%;C:\ffmpeg\bin"
+                if exist "%REGEXE%" (
+                    for /f "tokens=2*" %%a in ('"%REGEXE%" query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul ^| find "REG_"') do set "CURRENT_PATH=%%b"
+                    if defined CURRENT_PATH (
+                        echo %CURRENT_PATH% | find /i "C:\ffmpeg\bin" >nul || "%REGEXE%" add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul 2>&1
+                    )
+                )
+            )
+        )
     )
 )
 
-goto after_ffmpeg_install
-
-:install_ffmpeg_manual
-    echo   Downloading FFmpeg (portable)...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip' -OutFile '%INSTALL_DIR%\ffmpeg.zip'}"
-
-    echo   Extracting FFmpeg...
-    powershell -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
-
-    :: Install FFmpeg to user directory if no admin rights
-    if "%NO_ADMIN%"=="1" (
-        echo   Installing FFmpeg to user directory...
-        set "FFMPEG_DIR=%USERPROFILE%\ffmpeg"
-        if not exist "%FFMPEG_DIR%" mkdir "%FFMPEG_DIR%"
-        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
-            xcopy "%%i\*" "%FFMPEG_DIR%\" /E /I /Y >nul 2>&1
-        )
-        set "PATH=%PATH%;%FFMPEG_DIR%\bin"
-        echo   FFmpeg installed to: %FFMPEG_DIR%
-    ) else (
-        echo   Installing FFmpeg to system directory...
-        if not exist "C:\ffmpeg" mkdir "C:\ffmpeg" 2>nul
-        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
-            xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
-        )
-
-        :: Add to system PATH if admin
-        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
-        if defined CURRENT_PATH (
-            echo %CURRENT_PATH% | find /i "C:\ffmpeg\bin" >nul || (
-                reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul 2>&1
-            )
-        )
-        set "PATH=%PATH%;C:\ffmpeg\bin"
-    )
-
-    :: Add to user PATH regardless of admin status
-    reg query "HKCU\Environment" /v PATH >nul 2>&1
-    if errorlevel 1 (
-        if "%NO_ADMIN%"=="1" (
-            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%FFMPEG_DIR%\bin" /f >nul 2>&1
-        ) else (
-            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul 2>&1
-        )
-    ) else (
-        for /f "tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH 2^>nul') do (
-            if "%NO_ADMIN%"=="1" (
-                echo %%j | find /i "%FFMPEG_DIR%\bin" >nul || (
-                    reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;%FFMPEG_DIR%\bin" /f >nul 2>&1
-                )
-            ) else (
-                echo %%j | find /i "C:\ffmpeg\bin" >nul || (
-                    reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%%j;C:\ffmpeg\bin" /f >nul 2>&1
-                )
-            )
-        )
-    )
-
-    :: Test FFmpeg installation
-    echo   Testing FFmpeg installation...
-    if "%NO_ADMIN%"=="1" (
-        "%FFMPEG_DIR%\bin\ffmpeg.exe" -version >nul 2>&1
-        if not errorlevel 1 (
-            echo   [SUCCESS] FFmpeg is working! (User installation)
-        ) else (
-            echo   [INFO] FFmpeg installed to user directory - may need terminal restart
-        )
-    ) else (
-        "C:\ffmpeg\bin\ffmpeg.exe" -version >nul 2>&1
-        if not errorlevel 1 (
-            echo   [SUCCESS] FFmpeg is working! (System installation)
-        ) else (
-            echo   [INFO] FFmpeg installed to system - may need terminal restart
-        )
-    )
-
-    :: Final test from PATH
-    echo   Testing FFmpeg...
-    ffmpeg -version >nul 2>&1
-    if not errorlevel 1 (
-        echo   [SUCCESS] FFmpeg is working!
-    ) else (
-        echo   [INFO] FFmpeg installed - may need terminal restart to work from command line
-    )
-
-:after_ffmpeg_install
+:ffmpeg_done
+echo   Testing FFmpeg...
+ffmpeg -version >nul 2>&1 && echo   [SUCCESS] FFmpeg is working! || echo   [INFO] FFmpeg installed - may need terminal restart
 
 :: ------------------------------------------------------------
 :: 4) Project dependencies
@@ -207,10 +228,9 @@ echo [4/4] Installing project dependencies...
 cd /d "%~dp0"
 if not exist "node_modules" (
     echo   Installing npm packages...
-    call npm install
+    call "%NPM%" install
 )
 
-:: Verify installation
 echo.
 echo Verifying installation...
 node --version >nul 2>&1 && echo   [OK] Node.js ready || echo   [!] Node.js may need new terminal
@@ -221,50 +241,42 @@ if exist "node_modules" echo   [OK] Dependencies installed
 :: Mark as installed
 echo Installation completed successfully > "%~dp0\.installed"
 
-:start_app
 echo.
 echo ================================================================
 echo                 Starting Media File Explorer
 echo ================================================================
 echo.
 
-:: Kill any existing processes
+:: Kill any existing Node processes (best-effort)
 taskkill /F /IM node.exe >nul 2>&1
 
-:: Start the application
 echo Starting server...
-start /B npm start
+:: Use npm path directly to avoid PATH issues
+start "MediaExplorer" "%CMD%" /c ""%NPM%" run start"
 
-:: Wait for server to start
 echo Waiting for server to start...
-timeout /t 5 /nobreak >nul
+call :sleep_def 5
 
-:: Open browser
 echo Opening browser...
-start http://localhost:3000
+start "" http://localhost:3000
 
 echo.
 echo ================================================================
 echo     Media File Explorer is now running!
-echo     
-echo     Browser should open automatically to:
 echo     http://localhost:3000
-echo     
-echo     Close this window to stop the application.
 echo ================================================================
 echo.
 
-:: Keep the window open and monitor
 :monitor
-timeout /t 5 /nobreak >nul
+call :sleep_def 5
 tasklist /FI "IMAGENAME eq node.exe" 2>NUL | find /I /N "node.exe" >nul
 if "%ERRORLEVEL%"=="0" (
     goto monitor
 ) else (
     echo Server stopped. Restarting...
-    start /B npm start
-    timeout /t 3 /nobreak >nul
+    start "MediaExplorer" "%CMD%" /c ""%NPM%" run start"
+    call :sleep_def 3
     goto monitor
 )
 
-pause
+endlocal
