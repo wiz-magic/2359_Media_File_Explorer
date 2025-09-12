@@ -67,13 +67,19 @@ if %errorlevel% neq 0 (
         winget install CoreyButler.NVM-Windows --silent --accept-package-agreements --accept-source-agreements
     ) else (
         echo   winget not found. Installing nvm-windows via direct download...
-        set "NVM_SETUP=%INSTALL_DIR%\nvm-setup.exe"
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe' -OutFile '%NVM_SETUP%'}"
+        set "NVM_SETUP=%TEMP%\nvm-setup.exe"
+        if exist "%NVM_SETUP%" del /q "%NVM_SETUP%" >nul 2>&1
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $out = Join-Path $env:TEMP 'nvm-setup.exe'; Invoke-WebRequest -Uri 'https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe' -OutFile $out; if (Test-Path $out) { Write-Host 'Downloaded to' $out } else { Write-Error 'Download failed'; exit 1 }"
+        if errorlevel 1 (
+            set ERR=Failed to download nvm-windows installer.& goto trap_error
+        )
         if exist "%NVM_SETUP%" (
             echo   Running nvm-windows installer silently...
             "%NVM_SETUP%" /S
+            echo   Waiting for nvm to finalize...
+            timeout /t 5 /nobreak >nul
         ) else (
-            set ERR=Failed to download nvm-windows installer.& goto trap_error
+            set ERR=nvm-windows installer file not found after download.& goto trap_error
         )
     )
 
@@ -93,13 +99,12 @@ if %errorlevel% neq 0 (
         if defined NVM_SYMLINK set "PATH=%NVM_SYMLINK%;%PATH%"
     ) else (
         echo   nvm unavailable, falling back to Node MSI installer...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile '%INSTALL_DIR%\node.msi'}"
-        if exist "%INSTALL_DIR%\node.msi" (
-            msiexec /i "%INSTALL_DIR%\node.msi" /quiet /norestart
-            set "PATH=%PATH%;C:\Program Files\nodejs"
-        ) else (
-            set ERR=Failed to download Node.js MSI installer.& goto trap_error
-        )
+        set "NODE_MSI=%TEMP%\node-v20.18.0-x64.msi"
+        if exist "%NODE_MSI%" del /q "%NODE_MSI%" >nul 2>&1
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $out = Join-Path $env:TEMP 'node-v20.18.0-x64.msi'; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile $out; if (Test-Path $out) { Write-Host 'Downloaded to' $out } else { Write-Error 'Download failed'; exit 1 }"
+        if not exist "%NODE_MSI%" ( set ERR=Failed to download Node.js MSI installer.& goto trap_error )
+        msiexec /i "%NODE_MSI%" /quiet /norestart
+        set "PATH=%PATH%;C:\Program Files\nodejs"
     )
 ) else (
     echo   Node.js already installed
@@ -114,11 +119,13 @@ echo [2/4] Installing Python...
 where python >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Downloading Python 3.12.4...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile '%INSTALL_DIR%\python.exe'}"
-    if not exist "%INSTALL_DIR%\python.exe" ( set ERR=Failed to download Python installer.& goto trap_error )
+    set "PY_EXE=%TEMP%\python-3.12.4-amd64.exe"
+    if exist "%PY_EXE%" del /q "%PY_EXE%" >nul 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $out = Join-Path $env:TEMP 'python-3.12.4-amd64.exe'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile $out; if (Test-Path $out) { Write-Host 'Downloaded to' $out } else { Write-Error 'Download failed'; exit 1 }"
+    if not exist "%PY_EXE%" ( set ERR=Failed to download Python installer.& goto trap_error )
 
     echo   Installing Python...
-    "%INSTALL_DIR%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+    "%PY_EXE%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
     if errorlevel 1 ( set ERR=Python installation failed.& goto trap_error )
 
     echo   Waiting for installation to complete...
@@ -149,10 +156,12 @@ if %errorlevel% neq 0 (
     where ffmpeg >nul 2>&1
     if %errorlevel% neq 0 (
         echo   Downloading FFmpeg (zip fallback)...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip' -OutFile '%INSTALL_DIR%\ffmpeg.zip' } catch { Write-Host 'FFmpeg download failed' }}"
-        if exist "%INSTALL_DIR%\ffmpeg.zip" (
+        set "FF_ZIP=%TEMP%\ffmpeg-master-latest-win64-gpl.zip"
+        if exist "%FF_ZIP%" del /q "%FF_ZIP%" >nul 2>&1
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $out = Join-Path $env:TEMP 'ffmpeg-master-latest-win64-gpl.zip'; Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip' -OutFile $out; if (Test-Path $out) { Write-Host 'Downloaded to' $out } else { Write-Error 'Download failed'; exit 1 }"
+        if exist "%FF_ZIP%" (
             echo   Extracting FFmpeg...
-            powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%FF_ZIP%' -DestinationPath '%INSTALL_DIR%' -Force"
             if not exist "C:\ffmpeg" mkdir "C:\ffmpeg"
             for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
                 xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
