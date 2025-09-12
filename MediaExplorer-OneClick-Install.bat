@@ -94,13 +94,35 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
             xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul
         )
         
-        :: Add to PATH permanently
-        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH') do set "CURRENT_PATH=%%j"
-        echo %CURRENT_PATH% | find "C:\ffmpeg\bin" >nul
-        if errorlevel 1 (
-            reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul
+        :: Add to PATH permanently (improved)
+        echo   Adding FFmpeg to system PATH...
+        for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
+        if defined CURRENT_PATH (
+            echo %CURRENT_PATH% | find "C:\ffmpeg\bin" >nul
+            if errorlevel 1 (
+                reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;C:\ffmpeg\bin" /f >nul
+                if not errorlevel 1 echo   Successfully added to system PATH
+            ) else (
+                echo   Already in system PATH
+            )
         )
+        
+        :: Also add to user PATH as backup
+        for /f "tokens=2*" %%i in ('reg query "HKCU\Environment" /v PATH 2^>nul') do set "USER_PATH=%%j"
+        if defined USER_PATH (
+            echo %USER_PATH% | find "C:\ffmpeg\bin" >nul
+            if errorlevel 1 (
+                reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%USER_PATH%;C:\ffmpeg\bin" /f >nul
+            )
+        ) else (
+            reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "C:\ffmpeg\bin" /f >nul
+        )
+        
+        :: Set for current session
         set "PATH=%PATH%;C:\ffmpeg\bin"
+        
+        :: Broadcast environment change
+        powershell -Command "[Environment]::SetEnvironmentVariable('TEMP_REFRESH', [Environment]::GetEnvironmentVariable('TEMP_REFRESH', 'User'), 'User')" >nul 2>&1
     ) else (
         echo   FFmpeg download failed, skipping...
     )
@@ -115,6 +137,13 @@ if not exist "node_modules" (
     echo   Installing npm packages...
     call npm install
 )
+
+:: Verify installations
+echo.
+echo Verifying installations...
+node --version >nul 2>&1 && echo   [OK] Node.js is working || echo   [!] Node.js may need terminal restart
+python --version >nul 2>&1 && echo   [OK] Python is working || echo   [!] Python may need terminal restart
+C:\ffmpeg\bin\ffmpeg.exe -version >nul 2>&1 && echo   [OK] FFmpeg is working || echo   [!] FFmpeg may need terminal restart
 
 :: Mark as installed
 echo Installation completed successfully > "%~dp0\.installed"
