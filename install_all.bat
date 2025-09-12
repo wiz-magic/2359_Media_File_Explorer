@@ -69,40 +69,49 @@ if %errorlevel% neq 0 (
 echo 1. Installing Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
-    winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements
+    echo    Node.js not found. Installing...
+    winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo Node.js installation failed
+        echo    [ERROR] Node.js installation failed
     ) else (
-        echo Node.js installation completed
+        echo    [SUCCESS] Node.js installation completed
+        REM Refresh PATH for current session
+        call refreshenv >nul 2>&1
     )
 ) else (
-    echo Node.js already installed.
+    for /f "tokens=*" %%i in ('node --version 2^>nul') do echo    [OK] Node.js already installed: %%i
 )
 
 echo 2. Installing Python...
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    winget install Python.Python.3.12 --silent --accept-source-agreements
+    echo    Python not found. Installing...
+    winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo Python installation failed
+        echo    [ERROR] Python installation failed
     ) else (
-        echo Python installation completed
+        echo    [SUCCESS] Python installation completed
+        REM Refresh PATH for current session
+        call refreshenv >nul 2>&1
     )
 ) else (
-    echo Python already installed.
+    for /f "tokens=*" %%i in ('python --version 2^>nul') do echo    [OK] Python already installed: %%i
 )
 
 echo 3. Installing FFmpeg...
 ffmpeg -version >nul 2>&1
 if %errorlevel% neq 0 (
-    winget install Gyan.FFmpeg --silent --accept-source-agreements
+    echo    FFmpeg not found. Installing...
+    winget install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo FFmpeg installation failed
+        echo    [WARNING] FFmpeg installation failed. Video features may be limited.
     ) else (
-        echo FFmpeg installation completed
+        echo    [SUCCESS] FFmpeg installation completed
+        REM Refresh PATH for current session
+        call refreshenv >nul 2>&1
     )
 ) else (
-    echo FFmpeg already installed.
+    echo    [OK] FFmpeg already installed.
 )
 
 REM Install project dependencies
@@ -110,17 +119,25 @@ echo 4. Installing project dependencies...
 cd /d "%~dp0"
 if exist package.json (
     if not exist node_modules (
-        call npm install
+        echo    Installing npm packages...
+        REM Try to refresh PATH and use npm
+        call refreshenv >nul 2>&1
+        npm --version >nul 2>&1
         if %errorlevel% neq 0 (
-            echo npm install failed. Please run 'npm install' manually.
+            echo    [WARNING] npm not available yet. Please restart terminal and run 'npm install' manually.
         ) else (
-            echo Project dependencies installed successfully
+            call npm install
+            if %errorlevel% neq 0 (
+                echo    [ERROR] npm install failed. Please run 'npm install' manually after restarting terminal.
+            ) else (
+                echo    [SUCCESS] Project dependencies installed successfully
+            )
         )
     ) else (
-        echo Project dependencies already installed.
+        echo    [OK] Project dependencies already installed.
     )
 ) else (
-    echo package.json not found.
+    echo    [WARNING] package.json not found.
 )
 
 :success
@@ -129,10 +146,25 @@ echo ===============================================
 echo          Installation Complete!
 echo ===============================================
 echo.
-echo Installed versions:
-call node --version 2>nul && echo Node.js: OK || echo Node.js: NOT INSTALLED
-call python --version 2>nul && echo Python: OK || echo Python: NOT INSTALLED
-call ffmpeg -version 2>nul | findstr "ffmpeg version" && echo FFmpeg: OK || echo FFmpeg: NOT INSTALLED
+echo Installation Results:
+echo.
+call node --version >nul 2>&1 && (
+    for /f "tokens=*" %%i in ('node --version 2^>nul') do echo   [✓] Node.js %%i
+) || echo   [✗] Node.js: NOT INSTALLED - Please restart terminal
+
+call python --version >nul 2>&1 && (
+    for /f "tokens=*" %%i in ('python --version 2^>nul') do echo   [✓] Python %%i
+) || echo   [✗] Python: NOT INSTALLED - Please restart terminal
+
+call ffmpeg -version >nul 2>&1 && (
+    echo   [✓] FFmpeg: Installed
+) || echo   [✗] FFmpeg: NOT INSTALLED - Please restart terminal
+
+if exist node_modules (
+    echo   [✓] Project dependencies: Installed
+) else (
+    echo   [!] Project dependencies: Run 'npm install' after restarting terminal
+)
 echo.
 echo To start the application:
 echo   - Run 'MediaExplorer-Start.bat' or
