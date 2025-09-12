@@ -65,7 +65,7 @@ try {
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         try {
-            winget install CoreyButler.NVM-Windows --silent --accept-source-agreements
+            winget install CoreyButler.NVM-Windows --silent --accept-package-agreements --accept-source-agreements
             # Refresh environment variables for current session
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
             $env:NVM_HOME = [System.Environment]::GetEnvironmentVariable("NVM_HOME", "Machine")
@@ -138,7 +138,7 @@ if ($ffmpegCmd -or (Test-Path "C:\ffmpeg\bin\ffmpeg.exe")) {
     $ffmpegInstalled = $false
     if ($winget) {
         try {
-            winget install Gyan.FFmpeg --silent --accept-source-agreements
+            winget install Gyan.FFmpeg --silent --accept-package-agreements --accept-source-agreements
             # Refresh PATH
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
             if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
