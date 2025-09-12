@@ -109,26 +109,41 @@ set "NODE_URL=https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
 set "PY_URL=https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
 set "FFMPEG_ZIP_URL=https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip"
 
+:: Local installer cache support
+set "NODE_LOCAL1=%INSTALL_DIR%\node.msi"
+set "NODE_LOCAL2=%INSTALL_DIR%\node-v20.18.0-x64.msi"
+set "PY_LOCAL1=%INSTALL_DIR%\python.exe"
+set "PY_LOCAL2=%INSTALL_DIR%\python-3.12.4-amd64.exe"
+
 :: ------------------------------------------------------------
 :: 1) Node.js (v20.18.0)
 :: ------------------------------------------------------------
 echo [1/4] Installing Node.js...
 "%WHERE_EXE%" node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Downloading Node.js v20.18.0...
-    call :download "%NODE_URL%" "%INSTALL_DIR%\node.msi"
-    if errorlevel 1 (
-        echo   [ERROR] Failed to download Node.js. Please check internet connection.
+    rem Use local installer if available, otherwise download
+    if exist "%NODE_LOCAL2%" (
+        set "NODE_LOCAL=%NODE_LOCAL2%"
+    ) else if exist "%NODE_LOCAL1%" (
+        set "NODE_LOCAL=%NODE_LOCAL1%"
     ) else (
-        echo   Installing Node.js...
+        echo   Downloading Node.js v20.18.0...
+        call :download "%NODE_URL%" "%NODE_LOCAL1%"
+    )
+    if not defined NODE_LOCAL if exist "%NODE_LOCAL1%" set "NODE_LOCAL=%NODE_LOCAL1%"
+    if defined NODE_LOCAL (
+        echo   Installing Node.js from "%NODE_LOCAL%"...
         if exist "%MSIEXEC%" (
-            "%MSIEXEC%" /i "%INSTALL_DIR%\node.msi" /quiet /norestart
+            "%MSIEXEC%" /i "%NODE_LOCAL%" /quiet /norestart
         ) else (
             echo   [WARN] msiexec not found. Skipping Node.js installation.
         )
         echo   Finalizing Node.js install...
         call :sleep_def 10
         set "PATH=%PATH%;C:\Program Files\nodejs"
+    ) else (
+        echo   [ERROR] Failed to obtain Node.js installer.
+        echo   [HINT] Place node-v20.18.0-x64.msi OR node.msi under "%INSTALL_DIR%" and rerun.
     )
 ) else (
     echo   Node.js already installed
@@ -144,16 +159,25 @@ if not exist "%NPM%" set "NPM=npm"
 echo [2/4] Installing Python...
 "%WHERE_EXE%" python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Downloading Python 3.12.4...
-    call :download "%PY_URL%" "%INSTALL_DIR%\python.exe"
-    if errorlevel 1 (
-        echo   [ERROR] Failed to download Python.
+    rem Use local installer if available, otherwise download
+    if exist "%PY_LOCAL2%" (
+        set "PY_LOCAL=%PY_LOCAL2%"
+    ) else if exist "%PY_LOCAL1%" (
+        set "PY_LOCAL=%PY_LOCAL1%"
     ) else (
-        echo   Installing Python...
-        "%INSTALL_DIR%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+        echo   Downloading Python 3.12.4...
+        call :download "%PY_URL%" "%PY_LOCAL1%"
+    )
+    if not defined PY_LOCAL if exist "%PY_LOCAL1%" set "PY_LOCAL=%PY_LOCAL1%"
+    if defined PY_LOCAL (
+        echo   Installing Python from "%PY_LOCAL%"...
+        "%PY_LOCAL%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
         echo   Finalizing Python install...
         call :sleep_def 15
         set "PATH=%PATH%;C:\Program Files\Python312;C:\Program Files\Python312\Scripts"
+    ) else (
+        echo   [ERROR] Failed to obtain Python installer.
+        echo   [HINT] Place python-3.12.4-amd64.exe OR python.exe under "%INSTALL_DIR%" and rerun.
     )
 ) else (
     echo   Python already installed
@@ -183,21 +207,31 @@ if %errorlevel%==0 (
         echo   Winget not available. Using portable install...
     )
 
-    echo   Downloading FFmpeg (portable)...
-    call :download "%FFMPEG_ZIP_URL%" "%INSTALL_DIR%\ffmpeg.zip"
-    if errorlevel 1 (
-        echo   [ERROR] Failed to download FFmpeg.
+    rem Prefer an already-present ffmpeg folder under runtime
+    if exist "%INSTALL_DIR%\ffmpeg\bin\ffmpeg.exe" (
+        echo   Using local FFmpeg folder: "%INSTALL_DIR%\ffmpeg"
+        set "FFPORTABLE=%INSTALL_DIR%\ffmpeg"
     ) else (
-        echo   Extracting FFmpeg...
-        call :extract_zip "%INSTALL_DIR%\ffmpeg.zip" "%INSTALL_DIR%" || echo   [WARN] Could not extract with preferred tool. Trying tar if available.
-        
-        set "FFPORTABLE=%INSTALL_DIR%\ffmpeg_portable"
-        if not exist "%FFPORTABLE%" mkdir "%FFPORTABLE%" >nul 2>&1
-        for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
-            xcopy "%%i\*" "%FFPORTABLE%\" /E /I /Y >nul 2>&1
-            goto :after_copy_ff
+        if not exist "%INSTALL_DIR%\ffmpeg.zip" (
+            echo   Downloading FFmpeg (portable)...
+            call :download "%FFMPEG_ZIP_URL%" "%INSTALL_DIR%\ffmpeg.zip"
+        ) else (
+            echo   Using cached FFmpeg archive: "%INSTALL_DIR%\ffmpeg.zip"
         )
-        :after_copy_ff
+        if exist "%INSTALL_DIR%\ffmpeg.zip" (
+            echo   Extracting FFmpeg...
+            call :extract_zip "%INSTALL_DIR%\ffmpeg.zip" "%INSTALL_DIR%" || echo   [WARN] Could not extract with preferred tool. Trying tar if available.
+            set "FFEXTR="
+            for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
+                if not defined FFEXTR set "FFEXTR=%%i"
+            )
+            if defined FFEXTR (
+                set "FFPORTABLE=%INSTALL_DIR%\ffmpeg_portable"
+                if not exist "%FFPORTABLE%" mkdir "%FFPORTABLE%" >nul 2>&1
+                xcopy "%FFEXTR%\*" "%FFPORTABLE%\" /E /I /Y >nul 2>&1
+            )
+        )
+    )
         if exist "%FFPORTABLE%\bin" (
             if "%NO_ADMIN%"=="1" (
                 set "PATH=%PATH%;%FFPORTABLE%\bin"
