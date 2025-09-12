@@ -1,8 +1,7 @@
 @echo off
-chcp 65001 >nul
-title Media File Explorer - 원클릭 설치
+title Media File Explorer - One Click Setup
 
-REM 관리자 권한으로 실행
+REM Check and request administrator privileges
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     powershell -Command "Start-Process '%~f0' -Verb RunAs"
@@ -11,7 +10,7 @@ if %errorLevel% neq 0 (
 
 cls
 echo.
-echo  ██╗   ██╗███████╗██████╗ ██╗ █████╗     ███████╗██╗██╗     ███████╗
+echo  ███╗   ███╗███████╗██████╗ ██╗ █████╗     ███████╗██╗██╗     ███████╗
 echo  ████╗ ████║██╔════╝██╔══██╗██║██╔══██╗    ██╔════╝██║██║     ██╔════╝
 echo  ██╔████╔██║█████╗  ██║  ██║██║███████║    █████╗  ██║██║     █████╗  
 echo  ██║╚██╔╝██║██╔══╝  ██║  ██║██║██╔══██║    ██╔══╝  ██║██║     ██╔══╝  
@@ -26,174 +25,174 @@ echo                     ███████╗██╔╝ ██╗██║
 echo                     ╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
 echo.
 echo ===============================================================================
-echo                         🚀 원클릭 자동 설치 🚀
+echo                         ONE CLICK INSTALLER
 echo ===============================================================================
 echo.
-echo 이 프로그램은 Media File Explorer 실행에 필요한 모든 것을 자동으로 설치합니다:
+echo This installer will automatically install everything needed for Media File Explorer:
 echo.
-echo   ✅ Node.js (JavaScript 런타임)
-echo   ✅ Python (스크립트 실행 환경)  
-echo   ✅ FFmpeg (비디오/오디오 처리)
-echo   ✅ 필요한 npm 패키지들
+echo   [✓] Node.js (JavaScript Runtime)
+echo   [✓] Python (Script Environment)  
+echo   [✓] FFmpeg (Video/Audio Processing)
+echo   [✓] Required NPM Packages
 echo.
-echo 설치 시간: 약 5-10분 (인터넷 속도에 따라 다름)
+echo Installation time: About 5-10 minutes (depends on internet speed)
 echo.
 echo ===============================================================================
 
-set /p confirm="설치를 진행하시겠습니까? (Y/N): "
+set /p confirm="Do you want to proceed with installation? (Y/N): "
 if /i "%confirm%" neq "Y" (
-    echo 설치가 취소되었습니다.
+    echo Installation cancelled.
     pause
     exit /b
 )
 
 echo.
-echo [진행중] 설치를 시작합니다...
+echo [PROGRESS] Starting installation...
 echo.
 
-REM Winget 확인
-echo [1/5] 시스템 호환성 확인 중...
+REM Check system compatibility
+echo [1/5] Checking system compatibility...
 winget --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [오류] Windows Package Manager(winget)를 찾을 수 없습니다.
-    echo Windows 10 버전 1709 이상 또는 Windows 11이 필요합니다.
+    echo [ERROR] Windows Package Manager (winget) not found.
+    echo Windows 10 version 1709+ or Windows 11 required.
     echo.
-    echo 대안: Microsoft Store에서 "App Installer"를 설치한 후 다시 시도하세요.
-    echo 또는 수동 설치를 위해 'install_all.bat'을 실행하세요.
+    echo Alternative: Install "App Installer" from Microsoft Store and try again.
+    echo Or run 'install_all_fixed.bat' for manual installation.
     pause
     exit /b 1
 )
-echo [완료] 시스템이 호환됩니다.
+echo [COMPLETE] System is compatible.
 
-REM Node.js 설치
+REM Install Node.js
 echo.
-echo [2/5] Node.js 확인 및 설치 중...
+echo [2/5] Checking and installing Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Node.js를 설치하고 있습니다... (시간이 걸릴 수 있습니다)
+    echo Installing Node.js... (This may take a while)
     winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo [오류] Node.js 설치에 실패했습니다.
+        echo [ERROR] Node.js installation failed.
     ) else (
-        echo [완료] Node.js가 설치되었습니다.
+        echo [COMPLETE] Node.js installed successfully.
     )
 ) else (
     for /f "tokens=*" %%i in ('node --version') do set nodeversion=%%i
-    echo [완료] Node.js가 이미 설치되어 있습니다. (버전: !nodeversion!)
+    echo [COMPLETE] Node.js already installed (Version: %nodeversion%)
 )
 
-REM Python 설치  
+REM Install Python
 echo.
-echo [3/5] Python 확인 및 설치 중...
+echo [3/5] Checking and installing Python...
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Python을 설치하고 있습니다... (시간이 걸릴 수 있습니다)
+    echo Installing Python... (This may take a while)
     winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo [오류] Python 설치에 실패했습니다.
+        echo [ERROR] Python installation failed.
     ) else (
-        echo [완료] Python이 설치되었습니다.
+        echo [COMPLETE] Python installed successfully.
     )
 ) else (
     for /f "tokens=*" %%i in ('python --version') do set pythonversion=%%i
-    echo [완료] Python이 이미 설치되어 있습니다. (버전: !pythonversion!)
+    echo [COMPLETE] Python already installed (Version: %pythonversion%)
 )
 
-REM FFmpeg 설치
+REM Install FFmpeg
 echo.
-echo [4/5] FFmpeg 확인 및 설치 중...
+echo [4/5] Checking and installing FFmpeg...
 ffmpeg -version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo FFmpeg를 설치하고 있습니다... (시간이 걸릴 수 있습니다)
+    echo Installing FFmpeg... (This may take a while)
     winget install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
     if %errorlevel% neq 0 (
-        echo [경고] FFmpeg 설치에 실패했습니다. 비디오 썸네일 기능이 제한될 수 있습니다.
+        echo [WARNING] FFmpeg installation failed. Video thumbnail features may be limited.
     ) else (
-        echo [완료] FFmpeg가 설치되었습니다.
+        echo [COMPLETE] FFmpeg installed successfully.
     )
 ) else (
-    echo [완료] FFmpeg가 이미 설치되어 있습니다.
+    echo [COMPLETE] FFmpeg already installed.
 )
 
-REM 프로젝트 의존성 설치
+REM Install project dependencies
 echo.
-echo [5/5] 프로젝트 의존성 설치 중...
+echo [5/5] Installing project dependencies...
 cd /d "%~dp0"
 
-REM PATH 환경변수 새로고침
+REM Refresh PATH environment variables
 call refreshenv >nul 2>&1
 
 if exist package.json (
     if not exist node_modules (
-        echo npm 패키지들을 설치하고 있습니다...
+        echo Installing npm packages...
         call npm install --silent
         if %errorlevel% neq 0 (
-            echo [경고] 일부 npm 패키지 설치에 실패했을 수 있습니다.
-            echo 수동으로 'npm install'을 실행해주세요.
+            echo [WARNING] Some npm packages may have failed to install.
+            echo Please run 'npm install' manually.
         ) else (
-            echo [완료] 모든 의존성이 설치되었습니다.
+            echo [COMPLETE] All dependencies installed successfully.
         )
     ) else (
-        echo [완료] 의존성이 이미 설치되어 있습니다.
+        echo [COMPLETE] Dependencies already installed.
     )
 ) else (
-    echo [경고] package.json을 찾을 수 없습니다.
+    echo [WARNING] package.json not found.
 )
 
 echo.
 echo ===============================================================================
-echo                        🎉 설치 완료! 🎉
+echo                        INSTALLATION COMPLETE!
 echo ===============================================================================
 echo.
-echo 설치된 항목들:
+echo Installed components:
 echo.
 
-REM 설치 확인
+REM Verify installations
 call node --version >nul 2>&1 && (
-    for /f "tokens=*" %%i in ('node --version') do echo   ✅ Node.js %%i
-) || echo   ❌ Node.js 설치 실패
+    for /f "tokens=*" %%i in ('node --version') do echo   [✓] Node.js %%i
+) || echo   [✗] Node.js installation failed
 
 call python --version >nul 2>&1 && (
-    for /f "tokens=*" %%i in ('python --version') do echo   ✅ Python %%i  
-) || echo   ❌ Python 설치 실패
+    for /f "tokens=*" %%i in ('python --version') do echo   [✓] Python %%i  
+) || echo   [✗] Python installation failed
 
 call ffmpeg -version >nul 2>&1 && (
-    echo   ✅ FFmpeg 설치됨
-) || echo   ❌ FFmpeg 설치 실패
+    echo   [✓] FFmpeg installed
+) || echo   [✗] FFmpeg installation failed
 
 if exist node_modules (
-    echo   ✅ 프로젝트 의존성 설치됨
+    echo   [✓] Project dependencies installed
 ) else (
-    echo   ❌ 프로젝트 의존성 설치 실패
+    echo   [✗] Project dependencies installation failed
 )
 
 echo.
 echo ===============================================================================
-echo                        🚀 이제 시작할 수 있습니다! 🚀
+echo                        READY TO START!
 echo ===============================================================================
 echo.
-echo 다음 중 하나를 선택하여 Media File Explorer를 시작하세요:
+echo Choose one of the following to start Media File Explorer:
 echo.
-echo   1. '🚀 CLICK HERE TO START.bat' 더블클릭
-echo   2. 'MediaExplorer-Start.bat' 더블클릭  
-echo   3. 'START-HERE-WINDOWS.bat' 더블클릭
+echo   1. Double-click 'START-HERE-WINDOWS.bat'
+echo   2. Double-click 'MediaExplorer-Start.bat'
+echo   3. Double-click any file that starts with a rocket emoji
 echo.
-echo 웹브라우저에서 http://localhost:3000 주소로 접속됩니다.
+echo The application will open in your web browser at http://localhost:3000
 echo.
 
-set /p start="지금 바로 실행하시겠습니까? (Y/N): "
+set /p start="Would you like to start it now? (Y/N): "
 if /i "%start%"=="Y" (
-    if exist "🚀 CLICK HERE TO START.bat" (
-        echo Media File Explorer를 시작합니다...
-        start "" "🚀 CLICK HERE TO START.bat"
+    if exist "START-HERE-WINDOWS.bat" (
+        echo Starting Media File Explorer...
+        start "" "START-HERE-WINDOWS.bat"
     ) else if exist "MediaExplorer-Start.bat" (
-        echo Media File Explorer를 시작합니다...
+        echo Starting Media File Explorer...
         start "" "MediaExplorer-Start.bat"
     ) else (
-        echo 시작 파일을 찾을 수 없습니다.
+        echo Start file not found.
     )
 )
 
 echo.
-echo 설치가 완료되었습니다. 창을 닫으셔도 됩니다.
+echo Installation completed. You can close this window.
 pause

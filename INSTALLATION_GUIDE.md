@@ -1,25 +1,25 @@
-# 📥 Media File Explorer 설치 안내
+# 📥 Media File Explorer Installation Guide
 
-Media File Explorer 사용을 위해 필요한 프로그램들을 자동으로 설치하는 방법을 안내합니다.
+Complete installation guide for Media File Explorer with automatic setup scripts.
 
-## 🚀 추천 설치 방법 (가장 쉬움)
+## 🚀 Recommended Installation Methods (Easiest)
 
-### 방법 1: 원클릭 설치 (권장) ⭐
+### Method 1: One-Click Setup (Recommended) ⭐
 ```
-🚀 원클릭 설치.bat 더블클릭
+OneClick_Setup.bat - Double Click
 ```
-- **가장 사용하기 쉬운 방법**
-- 모든 필요한 프로그램을 자동으로 설치
-- 예쁜 UI와 상세한 진행 상황 표시
-- 설치 완료 후 바로 실행 가능
+- **Easiest method for all users**
+- Automatically installs all required programs
+- Beautiful UI with detailed progress indicators
+- Ready to run immediately after installation
 
-### 방법 2: 일반 설치
+### Method 2: Standard Installation
 ```
-install_all.bat 더블클릭
+install_all.bat - Double Click
 ```
-- 전통적인 설치 방식
-- 문제 발생 시 대체 설치 방법 제공
-- PowerShell 스크립트 실행 실패 시 자동으로 Winget 사용
+- Traditional installation method
+- Provides fallback installation methods if issues occur
+- Automatically uses Winget if PowerShell scripts fail
 
 ## 🔧 고급 사용자용
 
