@@ -19,6 +19,9 @@ set "TASKKILL_EXE=%SR%\System32\taskkill.exe"
 set "TASKLIST_EXE=%SR%\System32\tasklist.exe"
 set "CMD=%SR%\System32\cmd.exe"
 
+:: Jump over helper labels to main entry point
+goto :main
+
 :: Small sleep helper
 :sleep
 set "__SECS=%~1"
@@ -30,6 +33,7 @@ if exist "%TIMEOUT_EXE%" (
 )
 exit /b 0
 
+:main
 echo ================================================================
 echo        Media Explorer - Local (Offline) Installer
 echo ================================================================
