@@ -50,7 +50,8 @@ pause
 :: Check admin privilege (affects system PATH updates)
 echo Checking system permissions...
 "%NET_EXE%" session >nul 2>&1
-if %errorlevel% neq 0 (
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
   echo [INFO] Running without administrator privileges (install will use user PATH).
   set "NO_ADMIN=1"
 ) else (
