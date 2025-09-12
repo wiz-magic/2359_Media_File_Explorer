@@ -2,12 +2,36 @@
 # 자동 개발 환경 설치 스크립트 (PowerShell)
 #
 # 기능: Node.js, Python, FFmpeg 자동 설치 및 환경 설정
-# 실행 방법: 파일을 우클릭하여 'PowerShell에서 실행' 클릭
+# 실행 방법: install_all.bat 파일을 더블클릭하여 실행하세요
 # 주의: 스크립트 실행을 위해 관리자 권한이 필요할 수 있습니다.
 # ===================================================================
 
+param(
+    [switch]$AsAdmin
+)
+
+# 관리자 권한 확인
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+
+if (-not $isAdmin -and -not $AsAdmin) {
+    Write-Host "관리자 권한이 필요합니다. 관리자 권한으로 다시 시작합니다..." -ForegroundColor Yellow
+    try {
+        Start-Process PowerShell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`" -AsAdmin" -Verb RunAs -Wait
+        exit 0
+    } catch {
+        Write-Host "관리자 권한 획득에 실패했습니다. 수동으로 관리자 권한으로 실행해주세요." -ForegroundColor Red
+        Write-Host "아무 키나 눌러서 종료..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+}
+
 # 스크립트 실행 정책 임시 변경 (필요한 경우)
-Set-ExecutionPolicy Bypass -Scope Process -Force
+try {
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+} catch {
+    Write-Host "실행 정책 변경 실패. 계속 진행합니다..." -ForegroundColor Yellow
+}
 
 Write-Host "===============================================" -ForegroundColor Green
 Write-Host "   Media File Explorer - 자동 설치 스크립트" -ForegroundColor Green
