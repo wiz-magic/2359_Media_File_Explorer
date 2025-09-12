@@ -69,20 +69,21 @@ if %errorlevel% neq 0 (
         echo   winget not found. Installing nvm-windows via direct download...
         set "NVM_SETUP=%TEMP%\nvm-setup.exe"
         if exist "%NVM_SETUP%" del /q "%NVM_SETUP%" >nul 2>&1
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $dst = '%NVM_SETUP%'; Invoke-WebRequest -Uri 'https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe' -OutFile $dst; if (Test-Path $dst) { Write-Host 'Downloaded to' $dst } else { Write-Error 'Download failed'; exit 1 }"
-        if errorlevel 1 (
+        echo   Downloading nvm-windows (certutil)...
+        certutil -urlcache -split -f "https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe" "%NVM_SETUP%" >nul 2>&1
+        if not exist "%NVM_SETUP%" (
+            echo   certutil failed. Trying PowerShell WebClient...
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $dst=Join-Path $env:TEMP 'nvm-setup.exe'; (New-Object Net.WebClient).DownloadFile('https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe',$dst); if(!(Test-Path -LiteralPath $dst)){ exit 1 }"
+        )
+        if not exist "%NVM_SETUP%" (
             set ERR=Failed to download nvm-windows installer.& goto trap_error
         )
-        if exist "%NVM_SETUP%" (
-            echo   Running nvm-windows installer silently...
-            pushd "%TEMP%"
-            start /wait "nvmsetup" "%NVM_SETUP%" /S
-            popd
-            echo   Waiting for nvm to finalize...
-            timeout /t 5 /nobreak >nul
-        ) else (
-            set ERR=nvm-windows installer file not found after download.& goto trap_error
-        )
+        echo   Running nvm-windows installer silently...
+        pushd "%TEMP%"
+        start /wait "nvmsetup" "%NVM_SETUP%" /S
+        popd
+        echo   Waiting for nvm to finalize...
+        timeout /t 5 /nobreak >nul
     )
 
     rem Reload NVM environment to current session
@@ -103,7 +104,12 @@ if %errorlevel% neq 0 (
         echo   nvm unavailable, falling back to Node MSI installer...
         set "NODE_MSI=%TEMP%\node-v20.18.0-x64.msi"
         if exist "%NODE_MSI%" del /q "%NODE_MSI%" >nul 2>&1
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $dst = '%NODE_MSI%'; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile $dst; if (Test-Path $dst) { Write-Host 'Downloaded to' $dst } else { Write-Error 'Download failed'; exit 1 }"
+        echo   Downloading Node.js MSI (certutil)...
+        certutil -urlcache -split -f "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi" "%NODE_MSI%" >nul 2>&1
+        if not exist "%NODE_MSI%" (
+            echo   certutil failed. Trying PowerShell WebClient...
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $dst=Join-Path $env:TEMP 'node-v20.18.0-x64.msi'; (New-Object Net.WebClient).DownloadFile('https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi',$dst); if(!(Test-Path -LiteralPath $dst)){ exit 1 }"
+        )
         if not exist "%NODE_MSI%" ( set ERR=Failed to download Node.js MSI installer.& goto trap_error )
         msiexec /i "%NODE_MSI%" /quiet /norestart
         set "PATH=%PATH%;C:\Program Files\nodejs"
@@ -123,7 +129,12 @@ if %errorlevel% neq 0 (
     echo   Downloading Python 3.12.4...
     set "PY_EXE=%TEMP%\python-3.12.4-amd64.exe"
     if exist "%PY_EXE%" del /q "%PY_EXE%" >nul 2>&1
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $dst = '%PY_EXE%'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile $dst; if (Test-Path $dst) { Write-Host 'Downloaded to' $dst } else { Write-Error 'Download failed'; exit 1 }"
+    echo   Downloading Python (certutil)...
+    certutil -urlcache -split -f "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe" "%PY_EXE%" >nul 2>&1
+    if not exist "%PY_EXE%" (
+        echo   certutil failed. Trying PowerShell WebClient...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $dst=Join-Path $env:TEMP 'python-3.12.4-amd64.exe'; (New-Object Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe',$dst); if(!(Test-Path -LiteralPath $dst)){ exit 1 }"
+    )
     if not exist "%PY_EXE%" ( set ERR=Failed to download Python installer.& goto trap_error )
 
     echo   Installing Python...
@@ -160,7 +171,12 @@ if %errorlevel% neq 0 (
         echo   Downloading FFmpeg (zip fallback)...
         set "FF_ZIP=%TEMP%\ffmpeg-master-latest-win64-gpl.zip"
         if exist "%FF_ZIP%" del /q "%FF_ZIP%" >nul 2>&1
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $dst = '%FF_ZIP%'; Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip' -OutFile $dst; if (Test-Path $dst) { Write-Host 'Downloaded to' $dst } else { Write-Error 'Download failed'; exit 1 }"
+        echo   Downloading FFmpeg (certutil)...
+        certutil -urlcache -split -f "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" "%FF_ZIP%" >nul 2>&1
+        if not exist "%FF_ZIP%" (
+            echo   certutil failed. Trying PowerShell WebClient...
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $dst=Join-Path $env:TEMP 'ffmpeg-master-latest-win64-gpl.zip'; (New-Object Net.WebClient).DownloadFile('https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',$dst); if(!(Test-Path -LiteralPath $dst)){ exit 1 }"
+        )
         if exist "%FF_ZIP%" (
             echo   Extracting FFmpeg...
             powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%FF_ZIP%' -DestinationPath '%INSTALL_DIR%' -Force"
