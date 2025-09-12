@@ -1,209 +1,192 @@
-# ===================================================================
-# 자동 개발 환경 설치 스크립트 (PowerShell)
-#
-# 기능: Node.js, Python, FFmpeg 자동 설치 및 환경 설정
-# 실행 방법: install_all.bat 파일을 더블클릭하여 실행하세요
-# 주의: 스크립트 실행을 위해 관리자 권한이 필요할 수 있습니다.
-# ===================================================================
+# Media File Explorer - Clean Installation Script
+# No Korean characters to avoid encoding issues
 
 param(
     [switch]$AsAdmin
 )
 
-# 관리자 권한 확인
+# Check administrator privileges
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
 if (-not $isAdmin -and -not $AsAdmin) {
-    Write-Host "관리자 권한이 필요합니다. 관리자 권한으로 다시 시작합니다..." -ForegroundColor Yellow
+    Write-Host "Administrator privileges required. Restarting with admin rights..." -ForegroundColor Yellow
     try {
         Start-Process PowerShell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`" -AsAdmin" -Verb RunAs -Wait
         exit 0
     } catch {
-        Write-Host "관리자 권한 획득에 실패했습니다. 수동으로 관리자 권한으로 실행해주세요." -ForegroundColor Red
-        Write-Host "아무 키나 눌러서 종료..."
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        Write-Host "Failed to get administrator privileges. Please run as administrator manually." -ForegroundColor Red
+        Write-Host "Press any key to exit..."
+        $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         exit 1
     }
 }
 
-# 스크립트 실행 정책 임시 변경 (필요한 경우)
+# Set execution policy
 try {
     Set-ExecutionPolicy Bypass -Scope Process -Force
 } catch {
-    Write-Host "실행 정책 변경 실패. 계속 진행합니다..." -ForegroundColor Yellow
+    Write-Host "Failed to set execution policy. Continuing..." -ForegroundColor Yellow
 }
 
 Write-Host "===============================================" -ForegroundColor Green
-Write-Host "   Media File Explorer - 자동 설치 스크립트" -ForegroundColor Green
+Write-Host "   Media File Explorer - Auto Setup Script" -ForegroundColor Green
 Write-Host "===============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "설치 순서: Node.js → Python → FFmpeg" -ForegroundColor Cyan
+Write-Host "Installation order: Node.js -> Python -> FFmpeg" -ForegroundColor Cyan
 Write-Host ""
 
-# --- 1. Node.js 설치 ---
-Write-Host "1. Node.js 설치를 시작합니다..." -ForegroundColor Green
+# --- 1. Install Node.js ---
+Write-Host "1. Installing Node.js..." -ForegroundColor Green
 try {
-    # 기존 Node.js 확인
     $nodeVersion = node --version 2>$null
     if ($nodeVersion) {
-        Write-Host "    Node.js가 이미 설치되어 있습니다: $nodeVersion" -ForegroundColor Yellow
+        Write-Host "    Node.js already installed: $nodeVersion" -ForegroundColor Yellow
     } else {
-        # 다운로드할 Node.js 버전 및 파일 정보
         $nodeUrl = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
         $nodeInstaller = "$env:TEMP\node-installer.msi"
 
-        Write-Host "    Node.js v20.18.0 다운로드 중..." -ForegroundColor Yellow
-        # 다운로드
+        Write-Host "    Downloading Node.js v20.18.0..." -ForegroundColor Yellow
         Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeInstaller
 
-        Write-Host "    Node.js 설치 중..." -ForegroundColor Yellow
-        # MSI 설치 파일을 조용한 모드로 실행 (/qn = UI 없음)
+        Write-Host "    Installing Node.js..." -ForegroundColor Yellow
         Start-Process msiexec.exe -ArgumentList "/i `"$nodeInstaller`" /qn" -Wait
         
-        # 환경변수 새로고침
+        # Refresh environment variables
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         
-        Write-Host "    Node.js v20.18.0 설치 완료." -ForegroundColor Green
+        Write-Host "    Node.js v20.18.0 installation completed." -ForegroundColor Green
     }
 } catch {
-    Write-Host "    Node.js 설치 중 오류가 발생했습니다: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Node.js installation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# --- 2. Python 설치 ---
-Write-Host "`n2. Python 설치를 시작합니다..." -ForegroundColor Green
+# --- 2. Install Python ---
+Write-Host "`n2. Installing Python..." -ForegroundColor Green
 try {
-    # 기존 Python 확인
     $pythonVersion = python --version 2>$null
     if ($pythonVersion) {
-        Write-Host "    Python이 이미 설치되어 있습니다: $pythonVersion" -ForegroundColor Yellow
+        Write-Host "    Python already installed: $pythonVersion" -ForegroundColor Yellow
     } else {
-        # 다운로드할 파이썬 버전 및 파일 정보
         $pythonUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
         $pythonInstaller = "$env:TEMP\python-installer.exe"
 
-        Write-Host "    Python 3.12.4 다운로드 중..." -ForegroundColor Yellow
-        # 다운로드
+        Write-Host "    Downloading Python 3.12.4..." -ForegroundColor Yellow
         Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
 
-        Write-Host "    Python 설치 중..." -ForegroundColor Yellow
-        # 조용한(Silent) 모드로 설치 (모든 사용자용, PATH 자동 추가)
+        Write-Host "    Installing Python..." -ForegroundColor Yellow
         Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
         
-        # 환경변수 새로고침
+        # Refresh environment variables
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         
-        Write-Host "    Python 설치 완료." -ForegroundColor Green
+        Write-Host "    Python installation completed." -ForegroundColor Green
     }
 } catch {
-    Write-Host "    Python 설치 중 오류가 발생했습니다: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Python installation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# --- 3. FFmpeg 설치 (Winget 사용) ---
-Write-Host "`n3. FFmpeg 설치를 시작합니다..." -ForegroundColor Green
+# --- 3. Install FFmpeg ---
+Write-Host "`n3. Installing FFmpeg..." -ForegroundColor Green
 try {
-    # 기존 FFmpeg 확인
     $ffmpegVersion = ffmpeg -version 2>$null | Select-Object -First 1
     if ($ffmpegVersion) {
-        Write-Host "    FFmpeg가 이미 설치되어 있습니다" -ForegroundColor Yellow
+        Write-Host "    FFmpeg already installed" -ForegroundColor Yellow
     } else {
-        # Winget이 설치되어 있는지 확인
         $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
         if ($wingetCmd) {
-            Write-Host "    FFmpeg 설치 중 (Winget 사용)..." -ForegroundColor Yellow
-            # --silent : UI 최소화, --accept-source-agreements : 라이선스 자동 동의
-            winget install Gyan.FFmpeg --silent --accept-source-agreements
+            Write-Host "    Installing FFmpeg using Winget..." -ForegroundColor Yellow
+            winget install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
             
-            # 환경변수 새로고침
+            # Refresh environment variables
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
             
-            Write-Host "    FFmpeg 설치 완료." -ForegroundColor Green
+            Write-Host "    FFmpeg installation completed." -ForegroundColor Green
         } else {
-            Write-Host "    Winget이 설치되어 있지 않아 FFmpeg를 자동 설치할 수 없습니다." -ForegroundColor Yellow
-            Write-Host "    수동으로 https://ffmpeg.org/ 에서 다운로드하여 설치해 주세요." -ForegroundColor Yellow
+            Write-Host "    Winget not available. FFmpeg not installed automatically." -ForegroundColor Yellow
+            Write-Host "    Please download from https://ffmpeg.org/ manually." -ForegroundColor Yellow
         }
     }
 } catch {
-    Write-Host "    FFmpeg 설치 중 오류가 발생했습니다: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    FFmpeg installation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# --- 4. 프로젝트 의존성 설치 ---
-Write-Host "`n4. 프로젝트 의존성 설치를 시작합니다..." -ForegroundColor Green
+# --- 4. Install project dependencies ---
+Write-Host "`n4. Installing project dependencies..." -ForegroundColor Green
 try {
-    # 프로젝트 디렉토리로 이동
     Set-Location $PSScriptRoot
     
     if (Test-Path "package.json") {
         if (-not (Test-Path "node_modules")) {
-            Write-Host "    npm 패키지 설치 중..." -ForegroundColor Yellow
+            Write-Host "    Installing npm packages..." -ForegroundColor Yellow
             npm install
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "    프로젝트 의존성 설치 완료!" -ForegroundColor Green
+                Write-Host "    Project dependencies installation completed!" -ForegroundColor Green
             } else {
-                Write-Host "    일부 패키지 설치에 문제가 있을 수 있습니다." -ForegroundColor Yellow
+                Write-Host "    Some packages may not have installed correctly." -ForegroundColor Yellow
             }
         } else {
-            Write-Host "    의존성이 이미 설치되어 있습니다." -ForegroundColor Yellow
+            Write-Host "    Dependencies already installed." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "    package.json 파일을 찾을 수 없습니다." -ForegroundColor Yellow
+        Write-Host "    package.json file not found." -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "    프로젝트 의존성 설치 중 오류가 발생했습니다: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Project dependency installation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# --- 5. 설치 확인 ---
+# --- 5. Installation verification ---
 Write-Host "`n===============================================" -ForegroundColor Cyan
-Write-Host "           설치 결과 확인" -ForegroundColor Cyan
+Write-Host "           Installation Results" -ForegroundColor Cyan
 Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host "아래 버전 정보가 올바르게 나오면 성공입니다." -ForegroundColor White
+Write-Host "Below versions should appear if installation was successful." -ForegroundColor White
 Write-Host ""
 
-# 새로운 PowerShell 프로세스를 열어 환경 변수가 적용된 상태에서 버전을 확인합니다.
+# Verify installations in new PowerShell process to ensure environment variables are loaded
 try {
-    $nodeVer = powershell -NoProfile -Command "node --version 2>$null"
+    $nodeVer = powershell -NoProfile -Command "node --version 2>`$null"
     if ($nodeVer) {
-        Write-Host "✓ Node.js: $nodeVer" -ForegroundColor Green
+        Write-Host "Node.js: $nodeVer" -ForegroundColor Green
     } else {
-        Write-Host "✗ Node.js: 설치되지 않음 또는 PATH 설정 필요" -ForegroundColor Red
+        Write-Host "Node.js: NOT INSTALLED or PATH needs refresh" -ForegroundColor Red
     }
 } catch {
-    Write-Host "✗ Node.js: 확인할 수 없음" -ForegroundColor Red
+    Write-Host "Node.js: Cannot verify" -ForegroundColor Red
 }
 
 try {
-    $pythonVer = powershell -NoProfile -Command "python --version 2>$null"
+    $pythonVer = powershell -NoProfile -Command "python --version 2>`$null"
     if ($pythonVer) {
-        Write-Host "✓ Python: $pythonVer" -ForegroundColor Green
+        Write-Host "Python: $pythonVer" -ForegroundColor Green
     } else {
-        Write-Host "✗ Python: 설치되지 않음 또는 PATH 설정 필요" -ForegroundColor Red
+        Write-Host "Python: NOT INSTALLED or PATH needs refresh" -ForegroundColor Red
     }
 } catch {
-    Write-Host "✗ Python: 확인할 수 없음" -ForegroundColor Red
+    Write-Host "Python: Cannot verify" -ForegroundColor Red
 }
 
 try {
-    $ffmpegVer = powershell -NoProfile -Command "ffmpeg -version 2>$null | Select-Object -First 1"
+    $ffmpegVer = powershell -NoProfile -Command "ffmpeg -version 2>`$null | Select-Object -First 1"
     if ($ffmpegVer) {
-        Write-Host "✓ FFmpeg: 설치됨" -ForegroundColor Green
+        Write-Host "FFmpeg: Installed" -ForegroundColor Green
     } else {
-        Write-Host "✗ FFmpeg: 설치되지 않음 또는 PATH 설정 필요" -ForegroundColor Red
+        Write-Host "FFmpeg: NOT INSTALLED or PATH needs refresh" -ForegroundColor Red
     }
 } catch {
-    Write-Host "✗ FFmpeg: 확인할 수 없음" -ForegroundColor Red
+    Write-Host "FFmpeg: Cannot verify" -ForegroundColor Red
 }
 
 Write-Host ""
 Write-Host "===============================================" -ForegroundColor Green
-Write-Host "         설치 스크립트 완료!" -ForegroundColor Green
+Write-Host "         Setup Script Complete!" -ForegroundColor Green
 Write-Host "===============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "설치가 완료되었습니다. 터미널을 다시 시작한 후 애플리케이션을 실행해 주세요." -ForegroundColor White
+Write-Host "Installation completed. Please restart your terminal and run the application." -ForegroundColor White
 Write-Host ""
-Write-Host "애플리케이션 실행 방법:" -ForegroundColor Cyan
-Write-Host "  - MediaExplorer-Start.bat 실행" -ForegroundColor White
-Write-Host "  - 또는 🚀 CLICK HERE TO START.bat 실행" -ForegroundColor White
+Write-Host "To start the application:" -ForegroundColor Cyan
+Write-Host "  - Run MediaExplorer-Start.bat" -ForegroundColor White
+Write-Host "  - Or run START-HERE-WINDOWS.bat" -ForegroundColor White
 Write-Host ""
 
-# 사용자 입력 대기
-Write-Host "아무 키나 눌러서 종료하세요..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# Wait for user input
+Write-Host "Press any key to exit..."
+$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null

@@ -32,7 +32,7 @@ echo.
 echo Starting installation...
 echo.
 
-REM Run PowerShell script first
+REM Try to run PowerShell script first
 if exist "%~dp0install_all_direct.ps1" (
     echo Running PowerShell script...
     powershell -ExecutionPolicy Bypass -File "%~dp0install_all_direct.ps1" -AsAdmin
@@ -43,7 +43,7 @@ if exist "%~dp0install_all_direct.ps1" (
     )
     goto :success
 ) else (
-    echo install_all_direct.ps1 file not found.
+    echo PowerShell script not found. Using alternative installation...
     goto :fallback_install
 )
 
