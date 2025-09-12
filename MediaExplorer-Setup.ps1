@@ -50,8 +50,8 @@ function Download-File {
     }
 }
 
-# Install Node.js
-Write-Host "[1/4] Checking Node.js..." -ForegroundColor Cyan
+# Install Node.js (순서: 1/4)
+Write-Host "[1/4] Node.js 설치 확인 중..." -ForegroundColor Cyan
 try {
     $nodeVersion = node --version 2>$null
     if ($nodeVersion) {
@@ -102,8 +102,8 @@ try {
     }
 }
 
-# Install Python
-Write-Host "[2/4] Checking Python..." -ForegroundColor Cyan
+# Install Python (순서: 2/4)
+Write-Host "[2/4] Python 설치 확인 중..." -ForegroundColor Cyan
 try {
     $pythonVersion = python --version 2>$null
     if ($pythonVersion) {
@@ -127,8 +127,8 @@ try {
     }
 }
 
-# Install FFmpeg
-Write-Host "[3/4] Checking FFmpeg..." -ForegroundColor Cyan
+# Install FFmpeg (순서: 3/4)
+Write-Host "[3/4] FFmpeg 설치 확인 중..." -ForegroundColor Cyan
 $ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
 if ($ffmpegCmd -or (Test-Path "C:\ffmpeg\bin\ffmpeg.exe")) {
     Write-Host "    FFmpeg already installed" -ForegroundColor Green
@@ -184,12 +184,13 @@ if ($ffmpegCmd -or (Test-Path "C:\ffmpeg\bin\ffmpeg.exe")) {
 
 # Install project dependencies
 Write-Host "" 
-Write-Host "Verification - Installed versions:" -ForegroundColor Cyan
+Write-Host "설치 확인 - 설치된 버전들:" -ForegroundColor Cyan
+Write-Host "설치 순서: Node.js → Python → FFmpeg" -ForegroundColor Yellow
 try { Write-Host ("    Python: " + (python --version)) } catch { Write-Host "    Python not found." -ForegroundColor Yellow }
 try { Write-Host ("    FFmpeg: " + ((ffmpeg -version | Select-Object -First 1))) } catch { Write-Host "    FFmpeg not found." -ForegroundColor Yellow }
 try { Write-Host ("    Node.js: " + (node -v)) } catch { Write-Host "    Node.js not found." -ForegroundColor Yellow }
 Write-Host ""
-Write-Host "[4/4] Installing project dependencies..." -ForegroundColor Cyan
+Write-Host "[4/4] 프로젝트 의존성 설치 중..." -ForegroundColor Cyan
 Set-Location $PSScriptRoot  # Ensure we're in the correct directory
 if (-not (Test-Path "node_modules")) {
     Write-Host "    Installing npm packages..." -ForegroundColor Yellow
