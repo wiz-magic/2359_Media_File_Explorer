@@ -8,7 +8,7 @@ echo ================================================================
 echo.
 echo This will automatically:
 echo  1. Install Node.js (if needed)
-echo  2. Install Python (if needed) 
+echo  2. Install Python (if needed)
 echo  3. Install FFmpeg (if needed)
 echo  4. Install all dependencies
 echo  5. Start the application on localhost
@@ -35,61 +35,93 @@ if %errorlevel% neq 0 (
     set "NO_ADMIN=0"
 )
 
-echo [OK] Administrator access granted
 echo.
 
 :: Create installation directory
 set "INSTALL_DIR=%~dp0runtime"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-:: Download and install Node.js
+:: ------------------------------------------------------------
+:: 1) Node.js (v20.18.0)
+:: ------------------------------------------------------------
 echo [1/4] Installing Node.js...
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Downloading Node.js...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.17.0/node-v20.17.0-x64.msi' -OutFile '%INSTALL_DIR%\node.msi'}"
-    
+    echo   Downloading Node.js v20.18.0...
+    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile '%INSTALL_DIR%\node.msi'}"
+
     echo   Installing Node.js...
     msiexec /i "%INSTALL_DIR%\node.msi" /quiet /norestart
-    
+
     echo   Waiting for installation to complete...
     timeout /t 10 /nobreak >nul
-    
-    :: Refresh PATH
-    call refreshenv.cmd >nul 2>&1
+
+    :: Ensure PATH in this session
     set "PATH=%PATH%;C:\Program Files\nodejs"
 ) else (
     echo   Node.js already installed
 )
 
-:: Download and install Python
+:: ------------------------------------------------------------
+:: 2) Python (3.12.4)
+:: ------------------------------------------------------------
 echo [2/4] Installing Python...
 where python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Downloading Python...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe' -OutFile '%INSTALL_DIR%\python.exe'}"
-    
+    echo   Downloading Python 3.12.4...
+    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe' -OutFile '%INSTALL_DIR%\python.exe'}"
+
     echo   Installing Python...
     "%INSTALL_DIR%\python.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-    
+
     echo   Waiting for installation to complete...
     timeout /t 15 /nobreak >nul
-    
-    :: Refresh PATH
-    set "PATH=%PATH%;C:\Program Files\Python311;C:\Program Files\Python311\Scripts"
+
+    :: Ensure PATH in this session (common default)
+    set "PATH=%PATH%;C:\Program Files\Python312;C:\Program Files\Python312\Scripts"
 ) else (
     echo   Python already installed
 )
 
-:: Download and install FFmpeg
+:: ------------------------------------------------------------
+:: 3) FFmpeg (prefer Winget, fallback to portable)
+:: ------------------------------------------------------------
 echo [3/4] Installing FFmpeg...
-if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
-    echo   Downloading FFmpeg...
+
+:: If FFmpeg already available in PATH, skip
+where ffmpeg >nul 2>&1
+if %errorlevel%==0 (
+    echo   FFmpeg already installed
+) else (
+    :: Try Winget first
+    where winget >nul 2>&1
+    if %errorlevel%==0 (
+        echo   Installing FFmpeg via Winget...
+        winget install Gyan.FFmpeg --silent --accept-source-agreements --accept-package-agreements
+
+        :: Verify after Winget
+        ffmpeg -version >nul 2>&1
+        if %errorlevel%==0 (
+            echo   [SUCCESS] FFmpeg installed via Winget
+        ) else (
+            echo   Winget installation may require a restart. Falling back to portable install...
+            goto install_ffmpeg_manual
+        )
+    ) else (
+        echo   Winget not available. Using portable install...
+        goto install_ffmpeg_manual
+    )
+)
+
+goto after_ffmpeg_install
+
+:install_ffmpeg_manual
+    echo   Downloading FFmpeg (portable)...
     powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/release/ffmpeg-7.0.2-essentials_build.zip' -OutFile '%INSTALL_DIR%\ffmpeg.zip'}"
-    
+
     echo   Extracting FFmpeg...
     powershell -Command "Expand-Archive -Path '%INSTALL_DIR%\ffmpeg.zip' -DestinationPath '%INSTALL_DIR%' -Force"
-    
+
     :: Install FFmpeg to user directory if no admin rights
     if "%NO_ADMIN%"=="1" (
         echo   Installing FFmpeg to user directory...
@@ -106,7 +138,7 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
         for /d %%i in ("%INSTALL_DIR%\ffmpeg-*") do (
             xcopy "%%i\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
         )
-        
+
         :: Add to system PATH if admin
         for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%j"
         if defined CURRENT_PATH (
@@ -116,7 +148,7 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
         )
         set "PATH=%PATH%;C:\ffmpeg\bin"
     )
-    
+
     :: Add to user PATH regardless of admin status
     reg query "HKCU\Environment" /v PATH >nul 2>&1
     if errorlevel 1 (
@@ -138,7 +170,7 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
             )
         )
     )
-    
+
     :: Test FFmpeg installation
     echo   Testing FFmpeg installation...
     if "%NO_ADMIN%"=="1" (
@@ -156,20 +188,21 @@ if not exist "C:\ffmpeg\bin\ffmpeg.exe" (
             echo   [INFO] FFmpeg installed to system - may need terminal restart
         )
     )
-    
-    :: Test FFmpeg installation
+
+    :: Final test from PATH
     echo   Testing FFmpeg...
-    "C:\ffmpeg\bin\ffmpeg.exe" -version >nul 2>&1
+    ffmpeg -version >nul 2>&1
     if not errorlevel 1 (
         echo   [SUCCESS] FFmpeg is working!
     ) else (
         echo   [INFO] FFmpeg installed - may need terminal restart to work from command line
     )
-) else (
-    echo   FFmpeg already installed
-)
 
-:: Install project dependencies
+:after_ffmpeg_install
+
+:: ------------------------------------------------------------
+:: 4) Project dependencies
+:: ------------------------------------------------------------
 echo [4/4] Installing project dependencies...
 cd /d "%~dp0"
 if not exist "node_modules" (
@@ -181,8 +214,8 @@ if not exist "node_modules" (
 echo.
 echo Verifying installation...
 node --version >nul 2>&1 && echo   [OK] Node.js ready || echo   [!] Node.js may need new terminal
-python --version >nul 2>&1 && echo   [OK] Python ready || echo   [!] Python may need new terminal  
-if exist "C:\ffmpeg\bin\ffmpeg.exe" echo   [OK] FFmpeg installed
+python --version >nul 2>&1 && echo   [OK] Python ready || echo   [!] Python may need new terminal
+ffmpeg -version >nul 2>&1 && echo   [OK] FFmpeg installed || echo   [!] FFmpeg may need new terminal
 if exist "node_modules" echo   [OK] Dependencies installed
 
 :: Mark as installed
