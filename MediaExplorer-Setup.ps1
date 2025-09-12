@@ -60,18 +60,45 @@ try {
         throw "Not installed"
     }
 } catch {
-    Write-Host "    Installing Node.js..." -ForegroundColor Yellow
-    $nodeUrl = "https://nodejs.org/dist/v20.17.0/node-v20.17.0-x64.msi"
-    $nodeInstaller = Join-Path $installDir "node.msi"
-    
-    if (Download-File $nodeUrl $nodeInstaller) {
-        Write-Host "    Running Node.js installer..." -ForegroundColor Yellow
-        Start-Process -FilePath "msiexec" -ArgumentList "/i `"$nodeInstaller`" /quiet /norestart" -Wait
-        
-        # Refresh environment variables
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        
-        Write-Host "    Node.js installation completed!" -ForegroundColor Green
+    Write-Host "    Installing Node.js (nvm-windows + Node v20.18.0)..." -ForegroundColor Yellow
+
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        try {
+            winget install CoreyButler.NVM-Windows --silent --accept-source-agreements
+            # Refresh environment variables for current session
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            $env:NVM_HOME = [System.Environment]::GetEnvironmentVariable("NVM_HOME", "Machine")
+            $env:NVM_SYMLINK = [System.Environment]::GetEnvironmentVariable("NVM_SYMLINK", "Machine")
+
+            nvm install 20.18.0
+            nvm use 20.18.0
+
+            # Refresh PATH again after nvm use
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+            Write-Host "    Node.js v20.18.0 installation via nvm completed!" -ForegroundColor Green
+        } catch {
+            Write-Host "    nvm install failed via winget, falling back to MSI installer..." -ForegroundColor Yellow
+            $nodeUrl = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
+            $nodeInstaller = Join-Path $installDir "node.msi"
+            if (Download-File $nodeUrl $nodeInstaller) {
+                Write-Host "    Running Node.js MSI installer..." -ForegroundColor Yellow
+                Start-Process -FilePath "msiexec" -ArgumentList "/i `"$nodeInstaller`" /quiet /norestart" -Wait
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+                Write-Host "    Node.js installation completed!" -ForegroundColor Green
+            }
+        }
+    } else {
+        Write-Host "    Winget not found; using MSI installer..." -ForegroundColor Yellow
+        $nodeUrl = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
+        $nodeInstaller = Join-Path $installDir "node.msi"
+        if (Download-File $nodeUrl $nodeInstaller) {
+            Write-Host "    Running Node.js MSI installer..." -ForegroundColor Yellow
+            Start-Process -FilePath "msiexec" -ArgumentList "/i `"$nodeInstaller`" /quiet /norestart" -Wait
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            Write-Host "    Node.js installation completed!" -ForegroundColor Green
+        }
     }
 }
 
@@ -86,7 +113,7 @@ try {
     }
 } catch {
     Write-Host "    Installing Python..." -ForegroundColor Yellow
-    $pythonUrl = "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe"
+    $pythonUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
     $pythonInstaller = Join-Path $installDir "python.exe"
     
     if (Download-File $pythonUrl $pythonInstaller) {
@@ -102,41 +129,66 @@ try {
 
 # Install FFmpeg
 Write-Host "[3/4] Checking FFmpeg..." -ForegroundColor Cyan
-if (Test-Path "C:\ffmpeg\bin\ffmpeg.exe") {
+$ffmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
+if ($ffmpegCmd -or (Test-Path "C:\ffmpeg\bin\ffmpeg.exe")) {
     Write-Host "    FFmpeg already installed" -ForegroundColor Green
 } else {
     Write-Host "    Installing FFmpeg..." -ForegroundColor Yellow
-    $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-    $ffmpegZip = Join-Path $installDir "ffmpeg.zip"
-    
-    if (Download-File $ffmpegUrl $ffmpegZip) {
-        Write-Host "    Extracting FFmpeg..." -ForegroundColor Yellow
-        Expand-Archive -Path $ffmpegZip -DestinationPath $installDir -Force
-        
-        # Find extracted folder and move to C:\ffmpeg
-        $ffmpegFolder = Get-ChildItem -Path $installDir -Directory -Name "ffmpeg-*" | Select-Object -First 1
-        if ($ffmpegFolder) {
-            $sourcePath = Join-Path $installDir $ffmpegFolder
-            if (-not (Test-Path "C:\ffmpeg")) {
-                New-Item -ItemType Directory -Path "C:\ffmpeg" -Force | Out-Null
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    $ffmpegInstalled = $false
+    if ($winget) {
+        try {
+            winget install Gyan.FFmpeg --silent --accept-source-agreements
+            # Refresh PATH
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+                Write-Host "    FFmpeg installation via winget completed!" -ForegroundColor Green
+                $ffmpegInstalled = $true
             }
-            Copy-Item -Path "$sourcePath\*" -Destination "C:\ffmpeg\" -Recurse -Force
-            
-            # Add to PATH
-            $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-            if ($currentPath -notlike "*C:\ffmpeg\bin*") {
-                [Environment]::SetEnvironmentVariable("Path", "$currentPath;C:\ffmpeg\bin", "Machine")
-                $env:Path += ";C:\ffmpeg\bin"
-            }
-            
-            Write-Host "    FFmpeg installation completed!" -ForegroundColor Green
+        } catch {
+            Write-Host "    Winget FFmpeg install failed: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "    FFmpeg download failed, skipping..." -ForegroundColor Yellow
+        Write-Host "    Winget not found; using manual zip install..." -ForegroundColor Yellow
+    }
+
+    if (-not $ffmpegInstalled) {
+        $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        $ffmpegZip = Join-Path $installDir "ffmpeg.zip"
+        if (Download-File $ffmpegUrl $ffmpegZip) {
+            Write-Host "    Extracting FFmpeg..." -ForegroundColor Yellow
+            Expand-Archive -Path $ffmpegZip -DestinationPath $installDir -Force
+
+            $ffmpegFolder = Get-ChildItem -Path $installDir -Directory -Name "ffmpeg-*" | Select-Object -First 1
+            if ($ffmpegFolder) {
+                $sourcePath = Join-Path $installDir $ffmpegFolder
+                if (-not (Test-Path "C:\ffmpeg")) {
+                    New-Item -ItemType Directory -Path "C:\ffmpeg" -Force | Out-Null
+                }
+                Copy-Item -Path "$sourcePath\*" -Destination "C:\ffmpeg\" -Recurse -Force
+
+                $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+                if ($currentPath -notlike "*C:\ffmpeg\bin*") {
+                    [Environment]::SetEnvironmentVariable("Path", "$currentPath;C:\ffmpeg\bin", "Machine")
+                    $env:Path += ";C:\ffmpeg\bin"
+                }
+                Write-Host "    FFmpeg installation completed!" -ForegroundColor Green
+            } else {
+                Write-Host "    Could not find extracted FFmpeg folder." -ForegroundColor Red
+            }
+        } else {
+            Write-Host "    FFmpeg download failed, skipping..." -ForegroundColor Yellow
+        }
     }
 }
 
 # Install project dependencies
+Write-Host "" 
+Write-Host "Verification - Installed versions:" -ForegroundColor Cyan
+try { Write-Host ("    Python: " + (python --version)) } catch { Write-Host "    Python not found." -ForegroundColor Yellow }
+try { Write-Host ("    FFmpeg: " + ((ffmpeg -version | Select-Object -First 1))) } catch { Write-Host "    FFmpeg not found." -ForegroundColor Yellow }
+try { Write-Host ("    Node.js: " + (node -v)) } catch { Write-Host "    Node.js not found." -ForegroundColor Yellow }
+Write-Host ""
 Write-Host "[4/4] Installing project dependencies..." -ForegroundColor Cyan
 Set-Location $PSScriptRoot  # Ensure we're in the correct directory
 if (-not (Test-Path "node_modules")) {
