@@ -52,7 +52,7 @@ echo Checking system permissions...
 "%NET_EXE%" session >nul 2>&1
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (
-  echo [INFO] Running without administrator privileges (install will use user PATH).
+  echo [INFO] Running without administrator privileges - install will use user PATH.
   set "NO_ADMIN=1"
 ) else (
   echo [OK] Administrator access available.
@@ -121,7 +121,7 @@ if not defined FFBIN (
 if defined FFBIN (
   echo   Found FFmpeg bin: "%FFBIN%"
   if "%NO_ADMIN%"=="1" (
-    rem Add to user PATH (HKCU)
+    rem Add to user PATH - HKCU
     set "PATH=%PATH%;%FFBIN%"
     "%REGEXE%" query "HKCU\Environment" /v PATH >nul 2>&1
     if errorlevel 1 (
@@ -131,7 +131,7 @@ if defined FFBIN (
       echo !CURUSERPATH! | find /i "%FFBIN%" >nul || "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "!CURUSERPATH!;%FFBIN%" /f >nul 2>&1
     )
   ) else (
-    rem Admin: copy to C:\ffmpeg and add to system PATH (HKLM)
+    rem Admin: copy to C:\ffmpeg and add to system PATH - HKLM
     if not exist "C:\ffmpeg" mkdir "C:\ffmpeg" >nul 2>&1
     xcopy "%FFBIN%\..\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
     set "PATH=%PATH%;C:\ffmpeg\bin"
