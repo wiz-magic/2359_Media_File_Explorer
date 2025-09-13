@@ -420,6 +420,55 @@ async function detectGPUHardware() {
                 }
             } catch (e) {
                 console.log('⚠️ Windows GPU detection failed, trying alternative methods...');
+                
+                // 대안 1: PowerShell로 GPU 정보 확인
+                try {
+                    const { stdout } = await execPromise('powershell "Get-WmiObject Win32_VideoController | Select-Object Name | Format-Table -HideTableHeaders"');
+                    const lines = stdout.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
+                        const name = line.trim().toLowerCase();
+                        if (name.includes('nvidia') || name.includes('geforce') || name.includes('rtx') || name.includes('gtx')) {
+                            gpuInfo.nvidia = true;
+                            gpuInfo.devices.push({ vendor: 'nvidia', name: line.trim() });
+                        }
+                        if (name.includes('intel') || name.includes('uhd') || name.includes('iris') || name.includes('hd graphics')) {
+                            gpuInfo.intel = true;
+                            gpuInfo.devices.push({ vendor: 'intel', name: line.trim() });
+                        }
+                        if (name.includes('amd') || name.includes('radeon') || name.includes('vega')) {
+                            gpuInfo.amd = true;
+                            gpuInfo.devices.push({ vendor: 'amd', name: line.trim() });
+                        }
+                    }
+                    console.log('✅ PowerShell GPU detection successful');
+                } catch (e2) {
+                    console.log('⚠️ PowerShell GPU detection also failed');
+                    
+                    // 대안 2: DirectX 진단 도구 사용
+                    try {
+                        const { stdout } = await execPromise('dxdiag /t temp_dxdiag.txt && type temp_dxdiag.txt && del temp_dxdiag.txt', { timeout: 10000 });
+                        if (stdout.toLowerCase().includes('nvidia') || stdout.toLowerCase().includes('geforce')) {
+                            gpuInfo.nvidia = true;
+                            gpuInfo.devices.push({ vendor: 'nvidia', name: 'Detected via DirectX' });
+                        }
+                        if (stdout.toLowerCase().includes('intel') || stdout.toLowerCase().includes('uhd') || stdout.toLowerCase().includes('iris')) {
+                            gpuInfo.intel = true;
+                            gpuInfo.devices.push({ vendor: 'intel', name: 'Detected via DirectX' });
+                        }
+                        if (stdout.toLowerCase().includes('amd') || stdout.toLowerCase().includes('radeon')) {
+                            gpuInfo.amd = true;
+                            gpuInfo.devices.push({ vendor: 'amd', name: 'Detected via DirectX' });
+                        }
+                        console.log('✅ DirectX GPU detection successful');
+                    } catch (e3) {
+                        console.log('⚠️ All Windows GPU detection methods failed');
+                        
+                        // 대안 3: 일반적인 GPU 가속 테스트로 우회
+                        console.log('🔄 Proceeding with universal GPU acceleration tests...');
+                        gpuInfo.universal = true; // 범용 테스트 플래그
+                    }
+                }
             }
         } else if (platform === 'linux') {
             // Linux GPU 감지
@@ -532,6 +581,18 @@ function getAcceleratorPriorities(platform, gpuInfo) {
         accelerators.push(...platformPriorities.apple);
     }
 
+    // 범용 테스트가 필요한 경우 (GPU 감지 실패 시)
+    if (gpuInfo.universal) {
+        console.log('🔄 Using universal GPU acceleration tests');
+        if (platform === 'win32') {
+            accelerators.push('dxva2', 'd3d11va', 'cuda', 'qsv', 'opencl');
+        } else if (platform === 'linux') {
+            accelerators.push('vaapi', 'cuda', 'qsv', 'opencl');
+        } else if (platform === 'darwin') {
+            accelerators.push('videotoolbox', 'opencl');
+        }
+    }
+
     // 폴백 옵션 추가
     if (platformPriorities.fallback) {
         accelerators.push(...platformPriorities.fallback);
@@ -622,6 +683,7 @@ async function testHardwareAcceleration(accelerator, ffmpegPath = 'ffmpeg') {
 
         return false;
     } catch (error) {
+        console.log(`❌ ${accelerator} test failed: ${error.message.split('\n')[0]}`);
         return false;
     }
 }
