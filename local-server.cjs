@@ -688,6 +688,43 @@ async function testHardwareAcceleration(accelerator, ffmpegPath = 'ffmpeg') {
     }
 }
 
+// GPU 가속용 최적 명령어 생성
+function getOptimalCommand(accelerator, ffmpegPath = 'ffmpeg', options = {}) {
+    const { input = 'testsrc2=duration=1:size=320x240:rate=1', output = '/dev/null', isTest = false } = options;
+    
+    let command = `"${ffmpegPath}"`;
+    
+    // Windows에서 /dev/null 대신 NUL 사용
+    const nullOutput = process.platform === 'win32' ? 'NUL' : '/dev/null';
+    const finalOutput = output === '/dev/null' ? nullOutput : output;
+    
+    // 가속기별 명령어 생성
+    switch (accelerator) {
+        case 'cuda':
+            command += ` -f lavfi -i ${input} -c:v h264_nvenc -f null ${finalOutput} -v quiet`;
+            break;
+        case 'qsv':
+            command += ` -f lavfi -i ${input} -c:v h264_qsv -f null ${finalOutput} -v quiet`;
+            break;
+        case 'vaapi':
+            command += ` -f lavfi -i ${input} -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -c:v h264_vaapi -f null ${finalOutput} -v quiet`;
+            break;
+        case 'dxva2':
+            command += ` -f lavfi -i ${input} -hwaccel dxva2 -f null ${finalOutput} -v quiet`;
+            break;
+        case 'd3d11va':
+            command += ` -f lavfi -i ${input} -hwaccel d3d11va -f null ${finalOutput} -v quiet`;
+            break;
+        case 'opencl':
+            command += ` -f lavfi -i ${input} -init_hw_device opencl -filter_hw_device opencl -vf hwupload,scale_opencl=320:240 -f null ${finalOutput} -v quiet`;
+            break;
+        default:
+            return null;
+    }
+    
+    return command;
+}
+
 // 성능 기반 가속기 벤치마크
 async function benchmarkAccelerator(accelerator, ffmpegPath = 'ffmpeg') {
     const testCommand = getOptimalCommand(accelerator, ffmpegPath, {
@@ -830,8 +867,14 @@ async function checkFFmpegCapabilities() {
         // 하드웨어 가속 감지 (에러가 나도 FFmpeg 자체는 사용 가능)
         console.log('🎯 Starting hardware acceleration detection...');
         try {
-            capabilities.hwaccel = await detectHardwareAcceleration();
-            console.log('✅ Hardware acceleration detection completed');
+            const hwaccelResult = await detectHardwareAcceleration();
+            if (hwaccelResult && hwaccelResult.accelerator) {
+                capabilities.hwaccel = hwaccelResult.accelerator;
+                console.log(`✅ Hardware acceleration detection completed: ${hwaccelResult.accelerator}`);
+            } else {
+                capabilities.hwaccel = null;
+                console.log('ℹ️ No hardware acceleration available');
+            }
         } catch (hwError) {
             console.log('⚠️ GPU acceleration detection failed, continuing with CPU-only');
             console.log(`   Error: ${hwError.message.split('\n')[0]}`);
@@ -882,8 +925,14 @@ async function checkFFmpegCapabilities() {
                 // Runtime FFmpeg에서도 GPU 가속 시도
                 console.log('🎯 Starting hardware acceleration detection for runtime FFmpeg...');
                 try {
-                    runtimeCapabilities.hwaccel = await detectHardwareAcceleration(runtimeFFmpeg);
-                    console.log('✅ Runtime FFmpeg hardware acceleration detection completed');
+                    const hwaccelResult = await detectHardwareAcceleration(runtimeFFmpeg);
+                    if (hwaccelResult && hwaccelResult.accelerator) {
+                        runtimeCapabilities.hwaccel = hwaccelResult.accelerator;
+                        console.log(`✅ Runtime FFmpeg hardware acceleration detection completed: ${hwaccelResult.accelerator}`);
+                    } else {
+                        runtimeCapabilities.hwaccel = null;
+                        console.log('ℹ️ No runtime FFmpeg hardware acceleration available');
+                    }
                 } catch (hwError) {
                     console.log('⚠️ Runtime FFmpeg GPU acceleration detection failed');
                     console.log(`   Error: ${hwError.message.split('\n')[0]}`);
