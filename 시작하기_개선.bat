@@ -1,15 +1,11 @@
 @echo off
 chcp 65001 >nul
-title Media File Explorer
-cls
+setlocal enabledelayedexpansion
 
 echo ===============================================
 echo         Media File Explorer
 echo ===============================================
 echo.
-
-:: Change to script directory
-cd /d "%~dp0"
 
 :: Node.js 설치 확인
 echo Checking Node.js installation...
@@ -20,18 +16,18 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-for /f "tokens=*" %%i in ('node --version') do echo ✅ Node.js %%i installed
+echo ✅ Node.js is installed
 
 :: npm 패키지 설치 확인
 echo.
 echo Checking npm packages...
 if not exist "node_modules" (
     echo 📦 Installing npm packages for the first time...
-    echo This may take 1-2 minutes...
+    echo This may take a few minutes...
     call npm install
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo ❌ Failed to install packages!
-        echo Please check your internet connection.
+        echo Please check your internet connection and try again.
         pause
         exit /b 1
     )
@@ -41,11 +37,6 @@ if not exist "node_modules" (
     if not exist "node_modules\express" (
         echo ⚠️  Some packages are missing. Reinstalling...
         call npm install
-        if %errorlevel% neq 0 (
-            echo ❌ Failed to install packages!
-            pause
-            exit /b 1
-        )
     ) else (
         echo ✅ Packages are already installed
     )
@@ -58,30 +49,27 @@ pm2 --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo 📦 Installing PM2 globally...
     call npm install -g pm2
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo ⚠️  PM2 installation failed. Starting without PM2...
         goto :START_DIRECT
     )
 )
-for /f "tokens=*" %%i in ('pm2 --version 2^>nul') do echo ✅ PM2 %%i installed
-
-:: Kill any existing Node processes
-taskkill /F /IM node.exe >nul 2>&1
+echo ✅ PM2 is installed
 
 :: PM2로 서버 시작
 echo.
 echo Starting server with PM2...
 pm2 stop all >nul 2>&1
 pm2 delete all >nul 2>&1
-pm2 start ecosystem.config.cjs >nul 2>&1
+pm2 start ecosystem.config.cjs
 
 if %errorlevel% equ 0 (
     echo ✅ Server started successfully!
     echo.
     
-    :: 서버 준비 대기 (timeout 대신 ping 사용)
+    :: 서버 준비 대기
     echo Waiting for server to initialize...
-    ping 127.0.0.1 -n 4 >nul
+    ping 127.0.0.1 -n 3 >nul
     
     :: 브라우저 열기
     echo Opening browser...
@@ -115,16 +103,15 @@ if %errorlevel% equ 0 (
 echo.
 echo Starting server directly (without PM2)...
 echo.
-
-:: 브라우저 열기 (백그라운드)
-start http://localhost:3000
-
 echo ===============================================
 echo   Media File Explorer is now running!
 echo   URL: http://localhost:3000
 echo   Close this window to stop the server.
 echo ===============================================
 echo.
+
+:: 브라우저 열기 (백그라운드)
+start http://localhost:3000
 
 :: 서버 직접 실행
 node local-server.cjs
