@@ -15,9 +15,13 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 const open = require('open');
+const GPUDetector = require('./gpu-detector.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// GPU 감지기 초기화
+const gpuDetector = new GPUDetector();
 
 // Middleware - UTF-8 인코딩 설정 추가
 app.use(cors());
@@ -257,26 +261,13 @@ async function initCacheDirectories() {
 
 initCacheDirectories();
 
-// 하드웨어 가속 지원 확인
+// 하드웨어 가속 지원 확인 - 범용 자동 감지
 async function detectHardwareAcceleration() {
-    console.log('🔍 Testing hardware acceleration options...');
+    const capabilities = await gpuDetector.testHardwareAcceleration();
     
-    const accelerators = [
-        { name: 'cuda', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_nvenc -f null - -v quiet', priority: 1 },
-        { name: 'qsv', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_qsv -f null - -v quiet', priority: 2 },
-        { name: 'vaapi', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -vaapi_device /dev/dri/renderD128 -vf format=nv12,hwupload -c:v h264_vaapi -f null - -v quiet', priority: 3 },
-        { name: 'opencl', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -init_hw_device opencl -filter_hw_device opencl -vf hwupload,scale_opencl=320:240 -f null - -v quiet', priority: 4 }
-    ];
-
-    for (const accel of accelerators) {
-        try {
-            console.log(`  Testing ${accel.name}...`);
-            await execPromise(accel.test);
-            console.log(`✅ Hardware acceleration detected: ${accel.name}`);
-            return accel.name;
-        } catch (error) {
-            console.log(`  ❌ ${accel.name} failed: ${error.message.split('\n')[0]}`);
-        }
+    if (capabilities.available) {
+        console.log(`✅ Hardware acceleration detected: ${capabilities.method} (${capabilities.vendor})`);
+        return capabilities.method;
     }
     
     console.log('ℹ️  No hardware acceleration available, using optimized CPU');
@@ -289,26 +280,26 @@ async function checkFFmpegCapabilities() {
         // 기본 FFmpeg 확인
         const versionOutput = await execPromise('ffmpeg -version');
         
+        // GPU 감지기 사용
+        const gpuCapabilities = await gpuDetector.testHardwareAcceleration();
+        
         const capabilities = {
             available: true,
-            hwaccel: null,
+            hwaccel: gpuCapabilities.available ? gpuCapabilities.method : null,
+            vendor: gpuCapabilities.vendor || 'CPU',
             threads: require('os').cpus().length,
             avx512: false,
             optimized: false,
-            source: 'system'
+            source: 'system',
+            platform: process.platform,
+            gpuInfo: gpuCapabilities
         };
-
-        // 하드웨어 가속 감지
-        capabilities.hwaccel = await detectHardwareAcceleration();
         
-        // AVX-512 지원 확인 (CPU 기반 추정)
-        const cpuinfo = require('os').cpus()[0].model;
-        console.log(`🔍 CPU Info: ${cpuinfo} (${require('os').cpus().length} cores)`);
-        
-        if (cpuinfo.includes('Xeon') || cpuinfo.includes('Ryzen') || 
-            cpuinfo.includes('i7') || cpuinfo.includes('i9') ||
-            cpuinfo.includes('i5') || cpuinfo.includes('AMD')) {
-            capabilities.avx512 = true;
+        // CPU 최적화 정보
+        if (gpuCapabilities.cpuOptimizations) {
+            capabilities.avx512 = gpuCapabilities.cpuOptimizations.avx512;
+            capabilities.avx2 = gpuCapabilities.cpuOptimizations.avx2;
+            capabilities.avx = gpuCapabilities.cpuOptimizations.avx;
         }
 
         // 컴파일 옵션에서 최적화 확인
@@ -405,59 +396,34 @@ async function findRuntimeFFmpeg() {
 // 최적화된 FFmpeg 명령어 생성
 function buildOptimizedFFmpegCommand(videoPath, thumbnailPath, capabilities) {
     // FFmpeg 실행 파일 경로 설정
-    let command = capabilities.source === 'runtime' && capabilities.path 
+    let ffmpegPath = capabilities.source === 'runtime' && capabilities.path 
         ? `"${capabilities.path}"` 
         : 'ffmpeg';
     
-    // 하드웨어 가속 설정
-    if (capabilities.hwaccel) {
-        switch (capabilities.hwaccel) {
-            case 'cuda':
-                command += ' -hwaccel cuda -hwaccel_output_format cuda';
-                break;
-            case 'qsv':
-                command += ' -hwaccel qsv -hwaccel_output_format qsv';
-                break;
-            case 'vaapi':
-                command += ' -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi';
-                break;
-            case 'opencl':
-                command += ' -init_hw_device opencl -hwaccel opencl';
-                break;
+    // GPU 감지기를 사용한 명령어 생성
+    if (capabilities.gpuInfo) {
+        // gpuDetector의 buildCommand 메서드 활용
+        let command = gpuDetector.buildCommand(videoPath, thumbnailPath, capabilities.gpuInfo);
+        
+        // runtime FFmpeg 경로 적용
+        if (capabilities.source === 'runtime' && capabilities.path) {
+            command = command.replace('ffmpeg', `"${capabilities.path}"`);
         }
+        
+        return command;
     }
-
-    // 멀티스레딩 최적화
-    command += ` -threads ${capabilities.threads}`;
     
-    // 입력 파일
+    // 폴백: 기존 방식
+    let command = ffmpegPath;
+    command += ' -ss 00:00:01.000'; // 입력 전 시크
     command += ` -i "${videoPath}"`;
-    
-    // 썸네일 추출 최적화 (빠른 시크 + 단일 프레임)
-    command += ' -ss 00:00:01.000 -vframes 1 -an -sn';
-    
-    // 스케일링 필터 (하드웨어 가속 고려)
-    if (capabilities.hwaccel === 'cuda') {
-        command += ' -vf "scale_cuda=200:200:force_original_aspect_ratio=decrease,pad_cuda=200:200:(ow-iw)/2:(oh-ih)/2"';
-    } else if (capabilities.hwaccel === 'qsv') {
-        command += ' -vf "scale_qsv=200:200:force_original_aspect_ratio=decrease"';
-    } else if (capabilities.hwaccel === 'opencl') {
-        command += ' -vf "hwupload,scale_opencl=200:200:force_original_aspect_ratio=decrease,hwdownload,format=yuv420p,pad=200:200:(ow-iw)/2:(oh-ih)/2"';
-    } else {
-        // CPU 기반 최적화 (빠른 스케일링 알고리즘 + 멀티스레드)
-        if (capabilities.avx512) {
-            command += ' -vf "scale=200:200:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=200:200:(ow-iw)/2:(oh-ih)/2"';
-        } else {
-            command += ' -vf "scale=200:200:force_original_aspect_ratio=decrease:flags=bilinear,pad=200:200:(ow-iw)/2:(oh-ih)/2"';
-        }
-    }
-    
-    // 속도 우선 설정 (품질보다 속도)
-    command += ` -q:v 5 -preset ultrafast -f image2 "${thumbnailPath}" -y`;
-    
-    // 로그 레벨 최소화
+    command += ' -vframes 1 -an -sn';
+    command += ' -vf "scale=200:200:force_original_aspect_ratio=decrease"';
+    command += ` -threads ${capabilities.threads}`;
+    command += ' -q:v 5 -preset ultrafast';
+    command += ` -f image2 "${thumbnailPath}" -y`;
     command += ' -v error';
-
+    
     return command;
 }
 
