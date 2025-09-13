@@ -814,7 +814,9 @@ async function detectHardwareAcceleration(ffmpegPath = 'ffmpeg') {
 async function checkFFmpegCapabilities() {
     try {
         // 기본 FFmpeg 확인
+        console.log('🔧 Checking system FFmpeg...');
         const versionOutput = await execPromise('ffmpeg -version');
+        console.log('✅ System FFmpeg found');
         
         const capabilities = {
             available: true,
@@ -865,15 +867,28 @@ async function checkFFmpegCapabilities() {
                 // runtime FFmpeg로 버전 확인
                 const versionOutput = await execPromise(`"${runtimeFFmpeg}" -version`);
                 
-                return {
+                const runtimeCapabilities = {
                     available: true,
-                    hwaccel: null, // runtime은 기본적으로 하드웨어 가속 없음
+                    hwaccel: null,
                     threads: require('os').cpus().length,
                     avx512: false,
                     optimized: false,
                     source: 'runtime',
                     path: runtimeFFmpeg
                 };
+
+                // Runtime FFmpeg에서도 GPU 가속 시도
+                console.log('🎯 Starting hardware acceleration detection for runtime FFmpeg...');
+                try {
+                    runtimeCapabilities.hwaccel = await detectHardwareAcceleration(runtimeFFmpeg);
+                    console.log('✅ Runtime FFmpeg hardware acceleration detection completed');
+                } catch (hwError) {
+                    console.log('⚠️ Runtime FFmpeg GPU acceleration detection failed');
+                    console.log(`   Error: ${hwError.message.split('\n')[0]}`);
+                    runtimeCapabilities.hwaccel = null;
+                }
+
+                return runtimeCapabilities;
             }
         } catch (runtimeError) {
             console.log('❌ Runtime FFmpeg also not available');
