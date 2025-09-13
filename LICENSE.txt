@@ -1,6 +1,6 @@
 Media File Explorer 라이선스
 
-Copyright (c) 2024 Media Explorer Team
+Copyright (c) 2025 2359 Team
 
 본 소프트웨어는 무료로 제공되며, 다음 조건 하에 사용할 수 있습니다:
 

@@ -1,79 +1,23 @@
 
-# 📂 Media File Explorer
+# 📂 2359 Media File Explorer
 
 컴퓨터의 모든 미디어 파일을 쉽게 검색하고 미리보기할 수 있는 프로그램입니다.
+콘텐츠 기획에서 다양한 소스의 활용도를 높이고자 개발되었습니다.
+(현재는 윈도우만 지원하고 있습니다.)
 
-## 🚀 **Windows 사용자 가이드**
 
 ### 📥 **1단계: 다운로드**
 GitHub에서 **"Code" → "Download ZIP"** → 압축 해제
 
-### 🎯 **2단계: 실행 (3가지 방법)**
+### 🎯 **2단계: 설치**
+- **"원클릭 프로그램 설치"** 눌러 실행에 필요한 프로그램을 설치합니다.
+   - Node.js, Python, ffmpeng
 
-#### **방법 1: 디버그 모드 (문제 해결용)** 🔍
-**`DEBUG-RUN.bat`** 더블클릭
-→ 무엇이 문제인지 자세히 보여줍니다
 
-#### **방법 2: 빠른 시작** ⚡
-**`QUICK-START.bat`** 더블클릭  
-→ Node.js가 이미 설치되어 있다면 바로 실행
-
-#### **방법 3: 완전 자동화** 🤖
-**`RUN-MEDIA-EXPLORER.bat`** 더블클릭
-→ Node.js까지 자동 설치 (시간 오래 걸림)
-
----
-
-## 🆘 **스크립트가 바로 꺼진다면:**
-
-### **1단계**: **`DEBUG-RUN.bat`** 실행하세요!
-→ 정확한 문제를 알려줍니다
-
-### **2단계**: 일반적인 해결책
-- **관리자 권한으로 실행**: 파일 **오른쪽 클릭** → **"관리자 권한으로 실행"**
-- **Node.js 수동 설치**: https://nodejs.org 에서 LTS 버전 설치 후 컴퓨터 재시작
-
-### **3단계**: 수동 설치
-1. 명령 프롬프트 열기 (`Win + R` → `cmd`)
-2. 프로젝트 폴더로 이동: `cd "압축해제한폴더경로"`
-3. 패키지 설치: `npm install`
-4. 실행: `npm start`
-5. 브라우저에서 `http://localhost:3000` 접속
-
----
-
-## ✅ **성공하면:**
+## ✅ **성공하면**
+- **시작하기**를 누릅니다.
 - 브라우저에서 `http://localhost:3000` 자동 열림
 - 미디어 파일 검색 및 미리보기 사용 가능
-
----
-
-## 🎮 **개발자/Mac/Linux 사용자**
-
-### Mac/Linux  
-```bash
-./install-mac.sh
-./start.sh
-```
-
-### 수동 설치
-```bash
-npm install
-npm start
-```
-
-
-VIDEO THUMBNAILS (Optional):
-To enable video thumbnails, install FFmpeg:
-1. Download from: https://ffmpeg.org/download.html
-2. Choose "Windows builds from gyan.dev"
-3. Download the "full" version
-4. Extract to C:\ffmpeg
-5. Add C:\ffmpeg\bin to your PATH:
-   - Right-click "This PC" → Properties
-   - Advanced system settings
-   - Environment Variables
-   - Edit PATH → Add C:\ffmpeg\bin
 
 ## 💡 주요 기능
 - 📸 이미지 썸네일 자동 생성
@@ -81,49 +25,13 @@ To enable video thumbnails, install FFmpeg:
 - 📁 모든 폴더 접근 가능
 - 🎬 비디오, 음악, 문서 파일 지원
 
-## 📋 시스템 요구사항
-- Node.js 16.0 이상
-- Windows 10/11, macOS 10.15+, Linux
 
-## 🆘 문제 해결
-
-### "Node.js가 설치되어 있지 않습니다" 오류
-→ https://nodejs.org 에서 LTS 버전 다운로드 후 설치
-
-### "포트 3000이 사용 중입니다" 오류
-→ 다른 프로그램이 포트를 사용 중. start.bat 편집하여 포트 변경
-
-## 📧 문의
-문제가 있으시면 Issues 탭에 남겨주세요.
-
-
-
-# Media File Explorer - Real File System Edition
+# Media File Explorer 
 
 ## 프로젝트 개요
 - **이름**: Media File Explorer
 - **목표**: 실제 파일 시스템의 미디어 파일을 검색하고 미리보기할 수 있는 웹 기반 시스템
-- **주요 기능**: 
-  - ✅ **실제 파일 시스템 접근** - Node.js 백엔드로 실제 파일 스캔
-  - ✅ **동적 폴더 경로 지정** - 모든 접근 가능한 경로 스캔
-  - ✅ **실시간 파일 인덱싱** - 재귀적 폴더 스캔 (깊이 설정 가능)
-  - ✅ **파일명 기반 빠른 검색** - 실시간 필터링
-  - ✅ **이미지 썸네일 생성** - Sharp 라이브러리로 자동 생성
-  - ✅ **원본 파일 서빙** - 직접 파일 열기 지원
-  - ✅ **최근 경로 자동 저장**
 
-## 🚀 실행 중인 서비스
-
-### 서비스 URL
-- **프론트엔드 (Mock)**: https://3000-i51luexms0t8qbiy65hut-6532622b.e2b.dev/
-- **프론트엔드 (Real)**: https://3000-i51luexms0t8qbiy65hut-6532622b.e2b.dev/real
-- **백엔드 API**: http://localhost:3001
-
-### 서비스 상태
-- ✅ **Frontend Server**: 포트 3000에서 실행 중 (Cloudflare Pages Dev)
-- ✅ **Backend Server**: 포트 3001에서 실행 중 (Node.js Express)
-- ✅ **File System Access**: 정상 작동
-- ✅ **Thumbnail Generation**: Sharp 라이브러리 활성화
 
 ## 구현된 기능
 
@@ -222,32 +130,6 @@ To enable video thumbnails, install FFmpeg:
 - **Mime-types** - 파일 타입 감지
 - **PM2** - 프로세스 관리
 
-## 개발 명령어
-
-```bash
-# 서버 상태 확인
-pm2 list
-
-# 로그 확인
-pm2 logs media-explorer-frontend --nostream
-pm2 logs media-explorer-backend --nostream
-
-# 서버 재시작
-pm2 restart all
-
-# 서버 중지
-pm2 stop all
-
-# 서버 삭제
-pm2 delete all
-
-# 프로젝트 빌드
-npm run build
-
-# Git 커밋
-git add . && git commit -m "메시지"
-```
-
 ## 프로젝트 구조
 ```
 webapp/
@@ -279,26 +161,7 @@ webapp/
 - 대용량 파일 썸네일 생성 시 시간 소요
 - 브라우저 보안 정책으로 일부 파일 직접 열기 제한
 
-## 추후 개선 계획
-
-1. **성능 최적화**
-   - WebSocket 실시간 스캔 진행률
-   - Virtual scrolling for large lists
-   - Worker threads for scanning
-
-2. **기능 확장**
-   - 비디오 썸네일 생성
-   - 오디오 파형 시각화
-   - ZIP 파일 내부 탐색
-   - 파일 메타데이터 추출
-
-3. **UI/UX 개선**
-   - 드래그 앤 드롭 폴더 선택
-   - 다크 모드 지원
-   - 파일 정렬 옵션
-   - 북마크 기능
-
 ## 배포
-- **플랫폼**: Cloudflare Pages + Node.js Backend
+- **플랫폼**: Node.js Backend
 - **상태**: ✅ 개발 완료 및 실행 중
-- **마지막 업데이트**: 2024-08-14
+- **마지막 업데이트**: 2025-08-14
