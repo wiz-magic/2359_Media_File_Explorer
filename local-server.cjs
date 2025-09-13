@@ -714,6 +714,7 @@ async function benchmarkAccelerator(accelerator, ffmpegPath = 'ffmpeg') {
 // 지능형 하드웨어 가속 감지 (캐시 지원)
 async function detectHardwareAcceleration(ffmpegPath = 'ffmpeg') {
     console.log('🔍 Advanced GPU acceleration detection starting...');
+    console.log(`🔧 Using FFmpeg path: ${ffmpegPath}`);
     
     // 캐시된 설정 확인
     if (shouldSkipGPUDetection()) {
@@ -824,8 +825,14 @@ async function checkFFmpegCapabilities() {
             source: 'system'
         };
 
-        // 하드웨어 가속 감지
-        capabilities.hwaccel = await detectHardwareAcceleration();
+        // 하드웨어 가속 감지 (에러가 나도 FFmpeg 자체는 사용 가능)
+        try {
+            capabilities.hwaccel = await detectHardwareAcceleration();
+        } catch (hwError) {
+            console.log('⚠️ GPU acceleration detection failed, continuing with CPU-only');
+            console.log(`   Error: ${hwError.message.split('\n')[0]}`);
+            capabilities.hwaccel = null;
+        }
         
         // AVX-512 지원 확인 (CPU 기반 추정)
         const cpuinfo = require('os').cpus()[0].model;
