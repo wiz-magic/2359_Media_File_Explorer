@@ -51,12 +51,137 @@ const CACHE_CONFIG = {
     compressionQuality: 80 // WebP 압축 품질
 };
 
+// GPU 가속 설정 캐시
+const GPU_PERFORMANCE_CACHE_FILE = path.join(CACHE_DIR, 'gpu-performance.json');
+let gpuPerformanceCache = {
+    lastDetection: null,
+    optimalAccelerator: null,
+    performanceMetrics: {},
+    systemFingerprint: null,
+    detectionCount: 0
+};
+
 // 캐시 메타데이터 관리
 let cacheMetadata = {
     files: new Map(),
     totalSize: 0,
     lastCleanup: Date.now()
 };
+
+// 시스템 핑거프린트 생성 (하드웨어 변경 감지용)
+function generateSystemFingerprint() {
+    const os = require('os');
+    const platform = process.platform;
+    const arch = process.arch;
+    const cpus = os.cpus();
+    const totalMem = os.totalmem();
+    
+    const fingerprint = {
+        platform,
+        arch,
+        cpuModel: cpus[0]?.model || 'unknown',
+        cpuCount: cpus.length,
+        totalMemory: Math.floor(totalMem / (1024 * 1024 * 1024)), // GB
+        nodeVersion: process.version
+    };
+    
+    return crypto.createHash('md5')
+        .update(JSON.stringify(fingerprint))
+        .digest('hex');
+}
+
+// GPU 성능 캐시 로드
+async function loadGPUPerformanceCache() {
+    try {
+        if (fsSync.existsSync(GPU_PERFORMANCE_CACHE_FILE)) {
+            const data = JSON.parse(await fs.readFile(GPU_PERFORMANCE_CACHE_FILE, 'utf-8'));
+            gpuPerformanceCache = { ...gpuPerformanceCache, ...data };
+            console.log('📋 Loaded GPU performance cache:', {
+                optimalAccelerator: gpuPerformanceCache.optimalAccelerator,
+                detectionCount: gpuPerformanceCache.detectionCount,
+                lastDetection: gpuPerformanceCache.lastDetection ? new Date(gpuPerformanceCache.lastDetection).toLocaleString() : 'Never'
+            });
+        }
+    } catch (error) {
+        console.log('⚠️ Failed to load GPU performance cache:', error.message);
+        gpuPerformanceCache = {
+            lastDetection: null,
+            optimalAccelerator: null,
+            performanceMetrics: {},
+            systemFingerprint: null,
+            detectionCount: 0
+        };
+    }
+}
+
+// GPU 성능 캐시 저장
+async function saveGPUPerformanceCache() {
+    try {
+        await fs.writeFile(GPU_PERFORMANCE_CACHE_FILE, JSON.stringify(gpuPerformanceCache, null, 2));
+    } catch (error) {
+        console.log('⚠️ Failed to save GPU performance cache:', error.message);
+    }
+}
+
+// 시스템 변경 감지
+function hasSystemChanged() {
+    const currentFingerprint = generateSystemFingerprint();
+    const changed = gpuPerformanceCache.systemFingerprint !== currentFingerprint;
+    
+    if (changed) {
+        console.log('🔄 System change detected, will re-detect GPU capabilities');
+        gpuPerformanceCache.systemFingerprint = currentFingerprint;
+    }
+    
+    return changed;
+}
+
+// GPU 가속 설정 캐시 확인
+function shouldSkipGPUDetection() {
+    // 시스템이 변경되었다면 재감지 필요
+    if (hasSystemChanged()) {
+        return false;
+    }
+    
+    // 최근 1시간 이내에 감지했고 결과가 있다면 사용
+    if (gpuPerformanceCache.lastDetection && gpuPerformanceCache.optimalAccelerator) {
+        const hourAgo = Date.now() - (60 * 60 * 1000);
+        const recentDetection = gpuPerformanceCache.lastDetection > hourAgo;
+        
+        if (recentDetection) {
+            console.log(`💾 Using cached GPU setting: ${gpuPerformanceCache.optimalAccelerator}`);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// 캐시된 GPU 설정 업데이트
+async function updateGPUPerformanceCache(accelerator, performanceMetrics, alternatives) {
+    gpuPerformanceCache.lastDetection = Date.now();
+    gpuPerformanceCache.optimalAccelerator = accelerator;
+    gpuPerformanceCache.detectionCount += 1;
+    gpuPerformanceCache.systemFingerprint = generateSystemFingerprint();
+    
+    // 성능 메트릭 업데이트
+    if (performanceMetrics) {
+        gpuPerformanceCache.performanceMetrics[accelerator] = performanceMetrics;
+    }
+    
+    // 대안 가속기 성능도 저장
+    if (alternatives && alternatives.length > 0) {
+        alternatives.forEach(alt => {
+            if (alt.benchmark) {
+                gpuPerformanceCache.performanceMetrics[alt.name] = alt.benchmark;
+            }
+        });
+    }
+    
+    await saveGPUPerformanceCache();
+    
+    console.log(`💾 Updated GPU cache: ${accelerator} (detection #${gpuPerformanceCache.detectionCount})`);
+}
 
 // Get OS-specific default paths
 function getDefaultPaths() {
@@ -106,6 +231,9 @@ async function loadCacheMetadata() {
     } catch (error) {
         console.log('ℹ️  Creating new cache metadata');
     }
+    
+    // GPU 성능 캐시도 로드
+    await loadGPUPerformanceCache();
 }
 
 // 캐시 메타데이터 저장
@@ -257,29 +385,365 @@ async function initCacheDirectories() {
 
 initCacheDirectories();
 
-// 하드웨어 가속 지원 확인
-async function detectHardwareAcceleration() {
-    console.log('🔍 Testing hardware acceleration options...');
-    
-    const accelerators = [
-        { name: 'cuda', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_nvenc -f null - -v quiet', priority: 1 },
-        { name: 'qsv', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_qsv -f null - -v quiet', priority: 2 },
-        { name: 'vaapi', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -vaapi_device /dev/dri/renderD128 -vf format=nv12,hwupload -c:v h264_vaapi -f null - -v quiet', priority: 3 },
-        { name: 'opencl', test: 'ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -init_hw_device opencl -filter_hw_device opencl -vf hwupload,scale_opencl=320:240 -f null - -v quiet', priority: 4 }
-    ];
+// GPU 하드웨어 정보 감지
+async function detectGPUHardware() {
+    const platform = process.platform;
+    const gpuInfo = {
+        nvidia: false,
+        intel: false,
+        amd: false,
+        apple: false,
+        devices: []
+    };
 
-    for (const accel of accelerators) {
-        try {
-            console.log(`  Testing ${accel.name}...`);
-            await execPromise(accel.test);
-            console.log(`✅ Hardware acceleration detected: ${accel.name}`);
-            return accel.name;
-        } catch (error) {
-            console.log(`  ❌ ${accel.name} failed: ${error.message.split('\n')[0]}`);
+    try {
+        if (platform === 'win32') {
+            // Windows GPU 감지
+            try {
+                const { stdout } = await execPromise('wmic path win32_VideoController get name /format:csv');
+                const lines = stdout.split('\n').filter(line => line.includes(','));
+                
+                for (const line of lines) {
+                    const name = line.split(',')[1]?.toLowerCase() || '';
+                    if (name.includes('nvidia') || name.includes('geforce') || name.includes('rtx') || name.includes('gtx')) {
+                        gpuInfo.nvidia = true;
+                        gpuInfo.devices.push({ vendor: 'nvidia', name: line.split(',')[1] });
+                    }
+                    if (name.includes('intel') || name.includes('uhd') || name.includes('iris')) {
+                        gpuInfo.intel = true;
+                        gpuInfo.devices.push({ vendor: 'intel', name: line.split(',')[1] });
+                    }
+                    if (name.includes('amd') || name.includes('radeon') || name.includes('vega')) {
+                        gpuInfo.amd = true;
+                        gpuInfo.devices.push({ vendor: 'amd', name: line.split(',')[1] });
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ Windows GPU detection failed, trying alternative methods...');
+            }
+        } else if (platform === 'linux') {
+            // Linux GPU 감지
+            try {
+                // lspci 시도
+                const { stdout } = await execPromise('lspci | grep -i vga');
+                const lines = stdout.split('\n');
+                
+                for (const line of lines) {
+                    const lower = line.toLowerCase();
+                    if (lower.includes('nvidia')) {
+                        gpuInfo.nvidia = true;
+                        gpuInfo.devices.push({ vendor: 'nvidia', name: line });
+                    }
+                    if (lower.includes('intel')) {
+                        gpuInfo.intel = true;
+                        gpuInfo.devices.push({ vendor: 'intel', name: line });
+                    }
+                    if (lower.includes('amd') || lower.includes('radeon')) {
+                        gpuInfo.amd = true;
+                        gpuInfo.devices.push({ vendor: 'amd', name: line });
+                    }
+                }
+            } catch (e) {
+                // lspci 실패 시 /proc/cpuinfo로 Intel 내장 그래픽 추정
+                try {
+                    const { stdout } = await execPromise('cat /proc/cpuinfo | grep "model name" | head -1');
+                    if (stdout.toLowerCase().includes('intel')) {
+                        gpuInfo.intel = true;
+                        gpuInfo.devices.push({ vendor: 'intel', name: 'Intel Integrated Graphics (estimated)' });
+                    }
+                } catch (e2) {
+                    console.log('⚠️ Linux GPU detection failed');
+                }
+            }
+        } else if (platform === 'darwin') {
+            // macOS GPU 감지
+            try {
+                const { stdout } = await execPromise('system_profiler SPDisplaysDataType | grep "Chipset Model"');
+                const lines = stdout.split('\n');
+                
+                for (const line of lines) {
+                    const lower = line.toLowerCase();
+                    if (lower.includes('nvidia')) {
+                        gpuInfo.nvidia = true;
+                        gpuInfo.devices.push({ vendor: 'nvidia', name: line.trim() });
+                    }
+                    if (lower.includes('intel')) {
+                        gpuInfo.intel = true;
+                        gpuInfo.devices.push({ vendor: 'intel', name: line.trim() });
+                    }
+                    if (lower.includes('amd') || lower.includes('radeon')) {
+                        gpuInfo.amd = true;
+                        gpuInfo.devices.push({ vendor: 'amd', name: line.trim() });
+                    }
+                    if (lower.includes('apple') || lower.includes('m1') || lower.includes('m2') || lower.includes('m3')) {
+                        gpuInfo.apple = true;
+                        gpuInfo.devices.push({ vendor: 'apple', name: line.trim() });
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ macOS GPU detection failed');
+            }
+        }
+    } catch (error) {
+        console.log('⚠️ GPU detection error:', error.message);
+    }
+
+    return gpuInfo;
+}
+
+// 플랫폼별 최적 가속 우선순위
+function getAcceleratorPriorities(platform, gpuInfo) {
+    const priorities = {
+        'win32': {
+            nvidia: ['cuda', 'nvenc'],
+            intel: ['qsv', 'dxva2', 'd3d11va'],
+            amd: ['amf', 'dxva2', 'd3d11va'],
+            fallback: ['dxva2', 'opencl']
+        },
+        'linux': {
+            nvidia: ['cuda', 'nvenc'],
+            intel: ['qsv', 'vaapi'],
+            amd: ['vaapi', 'amf'],
+            fallback: ['vaapi', 'opencl']
+        },
+        'darwin': {
+            apple: ['videotoolbox'],
+            nvidia: ['cuda'],
+            intel: ['videotoolbox', 'qsv'],
+            amd: ['videotoolbox'],
+            fallback: ['videotoolbox', 'opencl']
+        }
+    };
+
+    const platformPriorities = priorities[platform] || priorities['linux'];
+    let accelerators = [];
+
+    // GPU별 우선순위 추가
+    if (gpuInfo.nvidia && platformPriorities.nvidia) {
+        accelerators.push(...platformPriorities.nvidia);
+    }
+    if (gpuInfo.intel && platformPriorities.intel) {
+        accelerators.push(...platformPriorities.intel);
+    }
+    if (gpuInfo.amd && platformPriorities.amd) {
+        accelerators.push(...platformPriorities.amd);
+    }
+    if (gpuInfo.apple && platformPriorities.apple) {
+        accelerators.push(...platformPriorities.apple);
+    }
+
+    // 폴백 옵션 추가
+    if (platformPriorities.fallback) {
+        accelerators.push(...platformPriorities.fallback);
+    }
+
+    // 중복 제거
+    return [...new Set(accelerators)];
+}
+
+// FFmpeg에서 지원하는 하드웨어 가속 확인
+async function checkFFmpegHardwareSupport(ffmpegPath = 'ffmpeg') {
+    try {
+        const { stdout } = await execPromise(`${ffmpegPath} -hwaccels`);
+        const supportedAccels = stdout
+            .split('\n')
+            .filter(line => line.trim() && !line.includes('Hardware acceleration methods:'))
+            .map(line => line.trim());
+
+        return supportedAccels;
+    } catch (error) {
+        console.log('⚠️ Could not check FFmpeg hardware acceleration support');
+        return [];
+    }
+}
+
+// 향상된 하드웨어 가속 테스트
+async function testHardwareAcceleration(accelerator, ffmpegPath = 'ffmpeg') {
+    const tests = {
+        cuda: {
+            decoder: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -hwaccel cuda -c:v h264_nvenc -f null - -v quiet`,
+            encoder: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_nvenc -f null - -v quiet`
+        },
+        qsv: {
+            test: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_qsv -f null - -v quiet`
+        },
+        vaapi: {
+            test: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -vaapi_device /dev/dri/renderD128 -vf format=nv12,hwupload -c:v h264_vaapi -f null - -v quiet`
+        },
+        videotoolbox: {
+            test: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -c:v h264_videotoolbox -f null - -v quiet`
+        },
+        opencl: {
+            test: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -init_hw_device opencl -filter_hw_device opencl -vf hwupload,scale_opencl=320:240 -f null - -v quiet`
+        },
+        dxva2: {
+            test: `${ffmpegPath} -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -hwaccel dxva2 -f null - -v quiet`
+        }
+    };
+
+    const accelTests = tests[accelerator];
+    if (!accelTests) return false;
+
+    try {
+        // 기본 테스트 실행
+        if (accelTests.test) {
+            await execPromise(accelTests.test);
+            return { success: true, type: 'basic' };
+        }
+
+        // CUDA의 경우 인코더와 디코더 개별 테스트
+        if (accelTests.decoder && accelTests.encoder) {
+            let decoderWorks = false;
+            let encoderWorks = false;
+
+            try {
+                await execPromise(accelTests.decoder);
+                decoderWorks = true;
+            } catch (e) {
+                // 디코더 실패는 괜찮음
+            }
+
+            try {
+                await execPromise(accelTests.encoder);
+                encoderWorks = true;
+            } catch (e) {
+                // 인코더 실패
+            }
+
+            if (encoderWorks || decoderWorks) {
+                return {
+                    success: true,
+                    type: 'cuda',
+                    decoder: decoderWorks,
+                    encoder: encoderWorks
+                };
+            }
+        }
+
+        return false;
+    } catch (error) {
+        return false;
+    }
+}
+
+// 성능 기반 가속기 벤치마크
+async function benchmarkAccelerator(accelerator, ffmpegPath = 'ffmpeg') {
+    const testCommand = getOptimalCommand(accelerator, ffmpegPath, {
+        input: 'testsrc2=duration=2:size=640x480:rate=30',
+        output: '/dev/null',
+        isTest: true
+    });
+
+    if (!testCommand) return null;
+
+    try {
+        const startTime = Date.now();
+        await execPromise(testCommand);
+        const duration = Date.now() - startTime;
+        
+        console.log(`⏱️ ${accelerator} benchmark: ${duration}ms`);
+        return { accelerator, duration, fps: Math.round(60000 / duration) };
+    } catch (error) {
+        console.log(`❌ ${accelerator} benchmark failed: ${error.message.split('\n')[0]}`);
+        return null;
+    }
+}
+
+// 지능형 하드웨어 가속 감지 (캐시 지원)
+async function detectHardwareAcceleration(ffmpegPath = 'ffmpeg') {
+    console.log('🔍 Advanced GPU acceleration detection starting...');
+    
+    // 캐시된 설정 확인
+    if (shouldSkipGPUDetection()) {
+        return {
+            accelerator: gpuPerformanceCache.optimalAccelerator,
+            details: {
+                name: gpuPerformanceCache.optimalAccelerator,
+                benchmark: gpuPerformanceCache.performanceMetrics[gpuPerformanceCache.optimalAccelerator] || null
+            },
+            alternatives: [],
+            cached: true,
+            gpuInfo: {}
+        };
+    }
+    
+    console.log('🔄 Performing fresh GPU detection...');
+    
+    // 1단계: 시스템 GPU 하드웨어 감지
+    const gpuInfo = await detectGPUHardware();
+    console.log('🖥️ GPU Hardware detected:', gpuInfo);
+    
+    // 2단계: FFmpeg 지원 가속 확인
+    const ffmpegSupport = await checkFFmpegHardwareSupport(ffmpegPath);
+    console.log('🛠️ FFmpeg supports:', ffmpegSupport);
+    
+    // 3단계: 플랫폼별 우선순위 결정
+    const platform = process.platform;
+    const priorities = getAcceleratorPriorities(platform, gpuInfo);
+    console.log('📋 Testing accelerators in priority order:', priorities);
+    
+    // 4단계: 실제 테스트 및 벤치마크
+    const workingAccelerators = [];
+    
+    for (const accelerator of priorities) {
+        if (!ffmpegSupport.includes(accelerator)) {
+            console.log(`  ⏭️ ${accelerator} - Not supported by FFmpeg`);
+            continue;
+        }
+        
+        console.log(`  🧪 Testing ${accelerator}...`);
+        const testResult = await testHardwareAcceleration(accelerator, ffmpegPath);
+        
+        if (testResult && testResult.success) {
+            console.log(`  ✅ ${accelerator} - Working`);
+            
+            // 성능 벤치마크
+            const benchmark = await benchmarkAccelerator(accelerator, ffmpegPath);
+            
+            workingAccelerators.push({
+                name: accelerator,
+                ...testResult,
+                benchmark
+            });
+            
+            // 첫 번째로 작동하는 가속기를 우선 선택하되, 더 나은 옵션이 있는지 몇 개 더 테스트
+            if (workingAccelerators.length >= 3) break;
+        } else {
+            console.log(`  ❌ ${accelerator} - Failed`);
         }
     }
     
-    console.log('ℹ️  No hardware acceleration available, using optimized CPU');
+    // 5단계: 최적 가속기 선택
+    if (workingAccelerators.length > 0) {
+        // 성능 기반 정렬 (속도 우선)
+        workingAccelerators.sort((a, b) => {
+            const aDuration = a.benchmark?.duration || 9999;
+            const bDuration = b.benchmark?.duration || 9999;
+            return aDuration - bDuration;
+        });
+        
+        const best = workingAccelerators[0];
+        const alternatives = workingAccelerators.slice(1);
+        
+        console.log(`🏆 Selected accelerator: ${best.name} (${best.benchmark?.duration || 'N/A'}ms)`);
+        
+        // 성능 캐시 업데이트
+        await updateGPUPerformanceCache(best.name, best.benchmark, alternatives);
+        
+        return {
+            accelerator: best.name,
+            details: best,
+            alternatives,
+            cached: false,
+            gpuInfo
+        };
+    }
+    
+    console.log('ℹ️ No hardware acceleration available, using optimized CPU');
+    
+    // CPU 모드도 캐시
+    await updateGPUPerformanceCache('cpu', null, []);
+    
     return null;
 }
 
@@ -362,28 +826,39 @@ async function checkFFmpegCapabilities() {
 }
 
 // runtime 폴더에서 FFmpeg 찾기
+// runtime 폴더에서 FFmpeg 검색 (플랫폼 지원 향상)
 async function findRuntimeFFmpeg() {
-    const runtimeDir = path.join(__dirname, 'runtime');
-    
     try {
+        const runtimeDir = path.join(__dirname, 'runtime');
+        
+        // runtime 폴더 존재 확인
         if (!fsSync.existsSync(runtimeDir)) {
+            console.log('⚠️ Runtime directory not found');
             return null;
         }
         
-        // 가능한 FFmpeg 경로들
+        const platform = process.platform;
+        const executableName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+        
+        // 플랫폼별 가능한 FFmpeg 경로들
         const possiblePaths = [
-            path.join(runtimeDir, 'ffmpeg', 'bin', 'ffmpeg.exe'),
-            path.join(runtimeDir, 'ffmpeg.exe'),
-            path.join(runtimeDir, 'ffmpeg', 'ffmpeg.exe')
+            path.join(runtimeDir, 'ffmpeg', 'bin', executableName),
+            path.join(runtimeDir, executableName),
+            path.join(runtimeDir, 'ffmpeg', executableName)
         ];
         
         // ffmpeg* 폴더 검색
         const entries = await fs.readdir(runtimeDir);
         for (const entry of entries) {
             if (entry.startsWith('ffmpeg')) {
-                const binPath = path.join(runtimeDir, entry, 'bin', 'ffmpeg.exe');
+                const binPath = path.join(runtimeDir, entry, 'bin', executableName);
+                const directPath = path.join(runtimeDir, entry, executableName);
+                
                 if (fsSync.existsSync(binPath)) {
                     possiblePaths.push(binPath);
+                }
+                if (fsSync.existsSync(directPath)) {
+                    possiblePaths.push(directPath);
                 }
             }
         }
@@ -391,13 +866,16 @@ async function findRuntimeFFmpeg() {
         // 첫 번째로 찾은 유효한 FFmpeg 반환
         for (const ffmpegPath of possiblePaths) {
             if (fsSync.existsSync(ffmpegPath)) {
+                console.log(`📍 Found runtime FFmpeg: ${ffmpegPath}`);
                 return ffmpegPath;
             }
         }
         
+        console.log('❌ No valid FFmpeg found in runtime directory');
         return null;
         
     } catch (error) {
+        console.log('❌ Error searching runtime FFmpeg:', error.message);
         return null;
     }
 }
@@ -508,11 +986,34 @@ async function generateVideoThumbnail(videoPath) {
             console.log(`   - Threads: ${capabilities.threads}`);
             console.log(`   - AVX-512: ${capabilities.avx512 ? 'Yes' : 'No'}`);
             console.log(`   - FFmpeg Source: ${capabilities.source}`);
-            console.log(`   - Performance: ${totalTime < 1000 ? '🚀 Fast' : totalTime < 3000 ? '⚡ Good' : '🐌 Slow'}`);
+            console.log(`   - Performance: ${totalTime < 50 ? '🚀🚀 Ultra Fast' : totalTime < 200 ? '🚀 Fast' : totalTime < 1000 ? '⚡ Good' : totalTime < 3000 ? '🐢 Moderate' : '🐌 Slow'}`);
             
-            // 성능 개선 제안
-            if (totalTime > 2000) {
-                console.log(`   💡 Performance tip: ${!capabilities.hwaccel ? 'Install GPU drivers for hardware acceleration' : 'Consider upgrading FFmpeg build'}`);
+            // 향상된 성능 분석 및 제안
+            if (capabilities.hwaccelDetails && capabilities.hwaccelDetails.alternatives.length > 0) {
+                const currentPerf = totalTime;
+                const alternatives = capabilities.hwaccelDetails.alternatives;
+                const betterAlts = alternatives.filter(alt => alt.benchmark && alt.benchmark.duration < currentPerf);
+                
+                if (betterAlts.length > 0) {
+                    console.log(`   💡 Better alternatives available: ${betterAlts.map(alt => `${alt.name} (${alt.benchmark.duration}ms)`).join(', ')}`);
+                }
+            }
+            
+            if (totalTime > 1000) {
+                const suggestions = [];
+                if (!capabilities.hwaccel) {
+                    suggestions.push('Install GPU drivers for hardware acceleration');
+                }
+                if (capabilities.threads < 4) {
+                    suggestions.push('Upgrade to multi-core CPU');
+                }
+                if (!capabilities.optimized) {
+                    suggestions.push('Use optimized FFmpeg build');
+                }
+                
+                if (suggestions.length > 0) {
+                    console.log(`   💡 Performance tips: ${suggestions.join(', ')}`);
+                }
             }
             
             return `/api/serve-video-thumbnail/${cacheKey}.jpg`;
@@ -535,6 +1036,7 @@ async function generateVideoThumbnail(videoPath) {
                 await recordCacheFile(thumbnailPath);
                 
                 console.log(`✅ Fallback successful: ${path.basename(videoPath)} (${totalTime}ms)`);
+                console.log(`   - Used: Basic CPU encoding (fallback mode)`);
                 return `/api/serve-video-thumbnail/${cacheKey}.jpg`;
             } catch (fallbackError) {
                 console.error('❌ Fallback also failed:', fallbackError.message);
@@ -1098,6 +1600,69 @@ function getNewestCacheFile() {
     
     return newest;
 }
+
+// GPU 성능 캐시 상태 API
+app.get('/api/gpu-performance', (req, res) => {
+    res.json({
+        status: 'success',
+        data: {
+            lastDetection: gpuPerformanceCache.lastDetection ? new Date(gpuPerformanceCache.lastDetection).toISOString() : null,
+            optimalAccelerator: gpuPerformanceCache.optimalAccelerator,
+            detectionCount: gpuPerformanceCache.detectionCount,
+            performanceMetrics: gpuPerformanceCache.performanceMetrics,
+            systemFingerprint: gpuPerformanceCache.systemFingerprint
+        }
+    });
+});
+
+// GPU 캐시 재설정 API
+app.post('/api/reset-gpu-cache', async (req, res) => {
+    try {
+        gpuPerformanceCache = {
+            lastDetection: null,
+            optimalAccelerator: null,
+            performanceMetrics: {},
+            systemFingerprint: null,
+            detectionCount: 0
+        };
+        
+        await saveGPUPerformanceCache();
+        
+        res.json({
+            status: 'success',
+            message: 'GPU performance cache has been reset. Next video thumbnail generation will re-detect optimal settings.'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to reset GPU cache: ' + error.message
+        });
+    }
+});
+
+// 향상된 캐시 상태 API
+app.get('/api/cache-status', (req, res) => {
+    const totalSizeMB = (cacheMetadata.totalSize / 1024 / 1024).toFixed(2);
+    const maxSizeMB = (CACHE_CONFIG.maxSizeGB * 1024).toFixed(0);
+    const usage = ((cacheMetadata.totalSize / (CACHE_CONFIG.maxSizeGB * 1024 * 1024 * 1024)) * 100).toFixed(1);
+    
+    res.json({
+        status: 'success',
+        cache: {
+            totalFiles: cacheMetadata.files.size,
+            totalSize: `${totalSizeMB}MB`,
+            maxSize: `${maxSizeMB}MB`,
+            usage: `${usage}%`,
+            lastCleanup: new Date(cacheMetadata.lastCleanup).toISOString()
+        },
+        gpu: {
+            lastDetection: gpuPerformanceCache.lastDetection ? new Date(gpuPerformanceCache.lastDetection).toISOString() : null,
+            optimalAccelerator: gpuPerformanceCache.optimalAccelerator || 'none',
+            detectionCount: gpuPerformanceCache.detectionCount,
+            availableAccelerators: Object.keys(gpuPerformanceCache.performanceMetrics).length
+        }
+    });
+});
 
 app.get('/', (req, res) => {
     const htmlPath = path.join(__dirname, 'public', 'index.html');
