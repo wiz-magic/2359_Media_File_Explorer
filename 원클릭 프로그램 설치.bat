@@ -33,33 +33,104 @@ if exist "%TIMEOUT_EXE%" (
 )
 exit /b 0
 
-:: Add path to system environment (simple version)
+:: Add path to system environment - improved version with error handling
 :add_to_system_path
 set "NEW_PATH=%~1"
-if not defined NEW_PATH exit /b 1
+if not defined NEW_PATH (
+  echo     [ERROR] No path provided to add_to_system_path
+  exit /b 1
+)
+
+echo     Checking if %NEW_PATH% is already in system PATH...
 for /f "tokens=2*" %%a in ('"%REGEXE%" query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH 2^>nul ^| find "REG_"') do set "CURSYS=%%b"
-echo %CURSYS% | find /i "%NEW_PATH%" >nul
-if errorlevel 1 (
-  echo     Adding to system PATH: %NEW_PATH%
-  "%REGEXE%" add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURSYS%;%NEW_PATH%" /f >nul 2>&1
+
+if not defined CURSYS (
+  echo     [ERROR] Could not read system PATH from registry
+  exit /b 1
+)
+
+:: Check if path already exists (case insensitive)
+echo !CURSYS! | find /i "%NEW_PATH%" >nul
+if not errorlevel 1 (
+  echo     Path already exists in system PATH: %NEW_PATH%
+  exit /b 0
+)
+
+echo     Adding to system PATH: %NEW_PATH%
+echo     Current system PATH length: !CURSYS:~0,50!...
+
+:: Use a safer approach with setx for system PATH
+setx PATH "%CURSYS%;%NEW_PATH%" /M >nul 2>&1
+set "SETX_RESULT=%ERRORLEVEL%"
+
+if "%SETX_RESULT%"=="0" (
+  echo     [OK] Successfully added to system PATH using setx
+) else (
+  echo     [WARN] setx failed, trying registry method...
+  "%REGEXE%" add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURSYS%;%NEW_PATH%" /f
+  if errorlevel 1 (
+    echo     [ERROR] Failed to add path to system registry
+    exit /b 1
+  ) else (
+    echo     [OK] Successfully added to system PATH using registry
+  )
 )
 exit /b 0
 
-:: Add path to user environment (simple version)
+:: Add path to user environment - improved version with error handling
 :add_to_user_path
 set "NEW_PATH=%~1"
-if not defined NEW_PATH exit /b 1
+if not defined NEW_PATH (
+  echo     [ERROR] No path provided to add_to_user_path
+  exit /b 1
+)
+
+echo     Checking if %NEW_PATH% is already in user PATH...
+
+:: Check if user PATH exists
 "%REGEXE%" query "HKCU\Environment" /v PATH >nul 2>&1
 if errorlevel 1 (
-  echo     Creating user PATH: %NEW_PATH%
-  "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%NEW_PATH%" /f >nul 2>&1
-) else (
-  for /f "tokens=2*" %%a in ('"%REGEXE%" query "HKCU\Environment" /v PATH 2^>nul ^| find "REG_"') do set "CURUSERPATH=%%b"
-  echo !CURUSERPATH! | find /i "%NEW_PATH%" >nul
+  echo     Creating new user PATH with: %NEW_PATH%
+  setx PATH "%NEW_PATH%" >nul 2>&1
   if errorlevel 1 (
-    echo     Adding to user PATH: %NEW_PATH%
-    "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "!CURUSERPATH!;%NEW_PATH%" /f >nul 2>&1
+    "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%NEW_PATH%" /f
+    if errorlevel 1 (
+      echo     [ERROR] Failed to create user PATH
+      exit /b 1
+    )
   )
+  echo     [OK] Created user PATH successfully
+  exit /b 0
+)
+
+:: User PATH exists, check if our path is already there
+for /f "tokens=2*" %%a in ('"%REGEXE%" query "HKCU\Environment" /v PATH 2^>nul ^| find "REG_"') do set "CURUSERPATH=%%b"
+
+if not defined CURUSERPATH (
+  echo     [ERROR] Could not read user PATH from registry
+  exit /b 1
+)
+
+:: Check if path already exists (case insensitive)
+echo !CURUSERPATH! | find /i "%NEW_PATH%" >nul
+if not errorlevel 1 (
+  echo     Path already exists in user PATH: %NEW_PATH%
+  exit /b 0
+)
+
+echo     Adding to user PATH: %NEW_PATH%
+setx PATH "!CURUSERPATH!;%NEW_PATH%" >nul 2>&1
+if errorlevel 1 (
+  echo     [WARN] setx failed, trying registry method...
+  "%REGEXE%" add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "!CURUSERPATH!;%NEW_PATH%" /f
+  if errorlevel 1 (
+    echo     [ERROR] Failed to add path to user registry
+    exit /b 1
+  ) else (
+    echo     [OK] Successfully added to user PATH using registry
+  )
+) else (
+  echo     [OK] Successfully added to user PATH using setx
 )
 exit /b 0
 
@@ -98,6 +169,7 @@ if not exist "%RUNTIME%" (
 :: -----------------------------------------------------------------
 :: 1) Install Node.js from local MSI
 :: -----------------------------------------------------------------
+echo.
 echo [1/3] Installing Node.js from local installer...
 set "NODE_LOCAL="
 for %%F in ("%RUNTIME%\node-v20.18.0-x64.msi") do if exist "%%~fF" set "NODE_LOCAL=%%~fF"
@@ -108,6 +180,7 @@ if not defined NODE_LOCAL (
 if defined NODE_LOCAL (
   echo   Using: "%NODE_LOCAL%"
   if exist "%MSIEXEC%" (
+    echo   Installing Node.js (please wait...)
     "%MSIEXEC%" /i "%NODE_LOCAL%" /quiet /norestart
     call :sleep 8
     
@@ -123,6 +196,8 @@ if defined NODE_LOCAL (
       ) else (
         call :add_to_system_path "!NODEJS_PATH!"
       )
+    ) else (
+      echo   [WARN] Node.js installation path not found - PATH may not be updated.
     )
   ) else (
     echo   [WARN] msiexec.exe not found. Cannot install Node.js automatically.
@@ -134,6 +209,7 @@ if defined NODE_LOCAL (
 :: -----------------------------------------------------------------
 :: 2) Install Python from local EXE
 :: -----------------------------------------------------------------
+echo.
 echo [2/3] Installing Python from local installer...
 set "PY_LOCAL="
 for %%F in ("%RUNTIME%\python-3.12.4-amd64.exe") do if exist "%%~fF" set "PY_LOCAL=%%~fF"
@@ -143,6 +219,7 @@ if not defined PY_LOCAL (
 :py_found
 if defined PY_LOCAL (
   echo   Using: "%PY_LOCAL%"
+  echo   Installing Python (please wait...)
   "%PY_LOCAL%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
   call :sleep 10
   
@@ -150,6 +227,7 @@ if defined PY_LOCAL (
   set "PYTHON_PATH="
   set "PYTHON_SCRIPTS_PATH="
   
+  echo   Searching for Python installation...
   :: Check common Python installation paths
   for %%V in (312 311 310 39 38) do (
     if exist "C:\Program Files\Python%%V\python.exe" (
@@ -164,6 +242,17 @@ if defined PY_LOCAL (
     )
   )
   
+  :: Check user AppData path
+  if exist "%USERPROFILE%\AppData\Local\Programs\Python\" (
+    for /d %%D in ("%USERPROFILE%\AppData\Local\Programs\Python\Python*") do (
+      if exist "%%D\python.exe" (
+        set "PYTHON_PATH=%%D"
+        set "PYTHON_SCRIPTS_PATH=%%D\Scripts"
+        goto :python_path_found
+      )
+    )
+  )
+  
   :python_path_found
   if defined PYTHON_PATH (
     echo   Python installed at: !PYTHON_PATH!
@@ -174,6 +263,8 @@ if defined PY_LOCAL (
       call :add_to_system_path "!PYTHON_PATH!"
       if defined PYTHON_SCRIPTS_PATH call :add_to_system_path "!PYTHON_SCRIPTS_PATH!"
     )
+  ) else (
+    echo   [WARN] Python installation path not found - PATH may not be updated.
   )
 ) else (
   echo   [WARN] No python*.exe found in runtime. Skipping Python.
@@ -182,6 +273,7 @@ if defined PY_LOCAL (
 :: -----------------------------------------------------------------
 :: 3) FFmpeg local setup (no download)
 :: -----------------------------------------------------------------
+echo.
 echo [3/3] Configuring FFmpeg from local folder...
 set "FFBIN="
 if exist "%RUNTIME%\ffmpeg\bin\ffmpeg.exe" set "FFBIN=%RUNTIME%\ffmpeg\bin"
@@ -197,8 +289,9 @@ if defined FFBIN (
   if "%NO_ADMIN%"=="1" (
     call :add_to_user_path "%FFBIN%"
   ) else (
-    rem Admin: copy to C:\ffmpeg and add to system PATH - HKLM
+    rem Admin: copy to C:\ffmpeg and add to system PATH
     if not exist "C:\ffmpeg" mkdir "C:\ffmpeg" >nul 2>&1
+    echo   Copying FFmpeg to C:\ffmpeg...
     xcopy "%FFBIN%\..\*" "C:\ffmpeg\" /E /I /Y >nul 2>&1
     call :add_to_system_path "C:\ffmpeg\bin"
   )
@@ -210,18 +303,59 @@ if defined FFBIN (
 :: Verification (best effort)
 :: -----------------------------------------------------------------
 echo.
-echo --- Verification ---
-for %%P in ("%ProgramFiles%\nodejs\node.exe") do if exist "%%~fP" ( "%%~fP" --version ) else ( echo Node.js: not detected in default path )
-for %%P in ("C:\Program Files\Python312\python.exe") do if exist "%%~fP" ( "%%~fP" --version ) else ( echo Python: not detected in default path )
-if defined FFBIN ( "%FFBIN%\ffmpeg.exe" -version | findstr version ) else ( echo FFmpeg: not detected )
+echo ================================================================
+echo                    VERIFICATION RESULTS
+echo ================================================================
 
 echo.
-echo ------------------------------------------------
-echo Local installation script completed.
-echo If commands are still not recognized, please:
-echo   - Open a NEW terminal (PATH refresh), or
-echo   - Reboot once for PATH changes to apply.
-echo ------------------------------------------------
+echo --- Checking installations ---
+if exist "%ProgramFiles%\nodejs\node.exe" (
+  echo   Node.js: INSTALLED at %ProgramFiles%\nodejs\
+  "%ProgramFiles%\nodejs\node.exe" --version 2>nul
+) else (
+  echo   Node.js: NOT FOUND
+)
+
+:: Check for Python
+set "PYTHON_FOUND=0"
+for %%V in (312 311 310 39 38) do (
+  if exist "C:\Program Files\Python%%V\python.exe" (
+    echo   Python: INSTALLED at C:\Program Files\Python%%V\
+    "C:\Program Files\Python%%V\python.exe" --version 2>nul
+    set "PYTHON_FOUND=1"
+    goto :python_check_done
+  )
+)
+:python_check_done
+if "%PYTHON_FOUND%"=="0" echo   Python: NOT FOUND
+
+if exist "C:\ffmpeg\bin\ffmpeg.exe" (
+  echo   FFmpeg: INSTALLED at C:\ffmpeg\bin\
+  "C:\ffmpeg\bin\ffmpeg.exe" -version 2>nul | findstr "version"
+) else (
+  echo   FFmpeg: NOT FOUND
+)
+
+echo.
+echo ================================================================
+echo                    IMPORTANT NOTICE
+echo ================================================================
+echo.
+echo Installation completed successfully!
+echo.
+echo *** NEXT STEPS TO MAKE COMMANDS WORK ***
+echo   1. CLOSE this window completely
+echo   2. CLOSE ALL other command prompts/PowerShell windows  
+echo   3. Open a NEW command prompt or PowerShell
+echo   4. Test: node --version, python --version, ffmpeg -version
+echo.
+echo *** IF STILL NOT WORKING ***
+echo   1. Restart your computer (RECOMMENDED)
+echo   2. Run "PATH 문제해결.bat" if you have it
+echo   3. Check Windows Environment Variables manually
+echo.
+echo PATH changes require a new terminal session to take effect!
+echo ================================================================
 
 :end
 echo.
