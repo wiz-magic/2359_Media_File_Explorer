@@ -1193,6 +1193,7 @@ async function generateImageThumbnail(imagePath) {
         // Check if thumbnail already exists
         try {
             await fs.access(thumbnailPath);
+            console.log(`💾 Cache HIT: ${path.basename(imagePath)} -> ${hash}.jpg`);
             touchCacheFile(thumbnailPath); // 캐시 접근 기록
             return `/api/serve-thumbnail/${hash}.jpg`;
         } catch {
@@ -1239,6 +1240,7 @@ async function generateImageThumbnail(imagePath) {
                 .jpeg({ quality: 85 })
                 .toFile(thumbnailPath);
             
+            console.log(`🆕 Cache MISS: Generated thumbnail for ${path.basename(imagePath)} -> ${hash}.jpg`);
             await recordCacheFile(thumbnailPath); // 캐시 파일 기록
             return `/api/serve-thumbnail/${hash}.jpg`;
         }
