@@ -80,12 +80,6 @@ if defined NODE_LOCAL (
   if exist "%MSIEXEC%" (
     "%MSIEXEC%" /i "%NODE_LOCAL%" /quiet /norestart
     call :sleep 8
-    
-    rem Add Node.js to PATH after installation
-    if exist "%ProgramFiles%\nodejs\node.exe" (
-      echo   Adding Node.js to PATH...
-      setx PATH "%PATH%;%ProgramFiles%\nodejs" /M >nul 2>&1
-    )
   ) else (
     echo   [WARN] msiexec.exe not found. Cannot install Node.js automatically.
   )
@@ -107,16 +101,6 @@ if defined PY_LOCAL (
   echo   Using: "%PY_LOCAL%"
   "%PY_LOCAL%" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
   call :sleep 10
-  
-  rem Add Python to PATH after installation (backup)
-  for %%V in (312 311 310) do (
-    if exist "C:\Program Files\Python%%V\python.exe" (
-      echo   Adding Python to PATH...
-      setx PATH "%PATH%;C:\Program Files\Python%%V;C:\Program Files\Python%%V\Scripts" /M >nul 2>&1
-      goto :python_done
-    )
-  )
-  :python_done
 ) else (
   echo   [WARN] No python*.exe found in runtime. Skipping Python.
 )
@@ -170,13 +154,9 @@ if defined FFBIN ( "%FFBIN%\ffmpeg.exe" -version ) else ( echo FFmpeg: not detec
 echo.
 echo ------------------------------------------------
 echo Local installation script completed.
-echo.
-echo *** IMPORTANT: PATH changes require terminal restart ***
-echo   1. CLOSE this window and all command prompts
-echo   2. Open a NEW command prompt or PowerShell
-echo   3. Test: node --version, python --version, ffmpeg -version
-echo.
-echo If still not working: RESTART your computer
+echo If commands are still not recognized, please:
+echo   - Open a NEW terminal (PATH refresh), or
+echo   - Reboot once for PATH changes to apply.
 echo ------------------------------------------------
 
 :end
