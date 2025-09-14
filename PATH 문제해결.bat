@@ -1,10 +1,4 @@
 @echo off
-setlocal EnableDelayedExpansion
-
-:: ================================================================
-::      PATH Problem Solver (Simple Version)
-::      Auto-add Node.js, Python, FFmpeg to PATH
-:: ================================================================
 
 echo ================================================================
 echo             PATH Problem Solver
@@ -14,103 +8,84 @@ echo This tool fixes PATH issues after reboot.
 echo.
 pause
 
-:: Check admin privileges - simplified
+echo Checking admin privileges...
 net session >nul 2>&1
 if errorlevel 1 (
   echo [INFO] User mode - will modify user PATH
-  set "USE_SYSTEM=0"
+  set USE_SYSTEM=0
 ) else (
   echo [OK] Admin mode - will modify system PATH
-  set "USE_SYSTEM=1"
+  set USE_SYSTEM=1
 )
 
 echo.
 echo Searching for programs...
 echo.
 
-:: Find Node.js - simplified
-set "NODEJS_PATH="
+REM Find Node.js
+set NODEJS_PATH=
 if exist "%ProgramFiles%\nodejs\node.exe" (
-  set "NODEJS_PATH=%ProgramFiles%\nodejs"
+  set NODEJS_PATH=%ProgramFiles%\nodejs
   echo [FOUND] Node.js at: %ProgramFiles%\nodejs
+) else (
+  echo [NOT FOUND] Node.js
 )
-if exist "%ProgramFiles(x86)%\nodejs\node.exe" (
-  set "NODEJS_PATH=%ProgramFiles(x86)%\nodejs" 
-  echo [FOUND] Node.js at: %ProgramFiles(x86)%\nodejs
-)
-if not defined NODEJS_PATH echo [NOT FOUND] Node.js
 
-:: Find Python - simplified
-set "PYTHON_PATH="
+REM Find Python
+set PYTHON_PATH=
 if exist "C:\Program Files\Python312\python.exe" (
-  set "PYTHON_PATH=C:\Program Files\Python312"
+  set PYTHON_PATH=C:\Program Files\Python312
   echo [FOUND] Python at: C:\Program Files\Python312
-)
-if exist "C:\Program Files\Python311\python.exe" (
-  set "PYTHON_PATH=C:\Program Files\Python311"
+) else if exist "C:\Program Files\Python311\python.exe" (
+  set PYTHON_PATH=C:\Program Files\Python311
   echo [FOUND] Python at: C:\Program Files\Python311
-)
-if exist "C:\Program Files\Python310\python.exe" (
-  set "PYTHON_PATH=C:\Program Files\Python310"
+) else if exist "C:\Program Files\Python310\python.exe" (
+  set PYTHON_PATH=C:\Program Files\Python310
   echo [FOUND] Python at: C:\Program Files\Python310
+) else (
+  echo [NOT FOUND] Python
 )
-if not defined PYTHON_PATH echo [NOT FOUND] Python
 
-:: Find FFmpeg - simplified
-set "FFMPEG_PATH="
+REM Find FFmpeg
+set FFMPEG_PATH=
 if exist "C:\ffmpeg\bin\ffmpeg.exe" (
-  set "FFMPEG_PATH=C:\ffmpeg\bin"
+  set FFMPEG_PATH=C:\ffmpeg\bin
   echo [FOUND] FFmpeg at: C:\ffmpeg\bin
-)
-if not defined FFMPEG_PATH echo [NOT FOUND] FFmpeg
-
-:: Check if anything was found
-if not defined NODEJS_PATH if not defined PYTHON_PATH if not defined FFMPEG_PATH (
-  echo.
-  echo ERROR: No programs found to add to PATH
-  echo Please run the one-click installer first
-  echo.
-  pause
-  goto :end
+) else (
+  echo [NOT FOUND] FFmpeg
 )
 
 echo.
 echo Adding to PATH...
 echo.
 
-:: Add Node.js to PATH
+REM Add Node.js to PATH
 if defined NODEJS_PATH (
   echo Adding Node.js to PATH...
-  if "%USE_SYSTEM%"=="1" (
+  if %USE_SYSTEM%==1 (
     setx PATH "%PATH%;%NODEJS_PATH%" /M
-    echo Node.js added to system PATH
   ) else (
     setx PATH "%PATH%;%NODEJS_PATH%"
-    echo Node.js added to user PATH
   )
 )
 
-:: Add Python to PATH
+REM Add Python to PATH
 if defined PYTHON_PATH (
   echo Adding Python to PATH...
-  if "%USE_SYSTEM%"=="1" (
+  if %USE_SYSTEM%==1 (
     setx PATH "%PATH%;%PYTHON_PATH%;%PYTHON_PATH%\Scripts" /M
-    echo Python added to system PATH
   ) else (
     setx PATH "%PATH%;%PYTHON_PATH%;%PYTHON_PATH%\Scripts"
-    echo Python added to user PATH
   )
 )
 
-:: Add FFmpeg to PATH
+REM Add FFmpeg to PATH
 if defined FFMPEG_PATH (
   echo Adding FFmpeg to PATH...
-  if "%USE_SYSTEM%"=="1" (
+  if %USE_SYSTEM%==1 (
     setx PATH "%PATH%;%FFMPEG_PATH%" /M
-    echo FFmpeg added to system PATH
   ) else (
     setx PATH "%PATH%;%FFMPEG_PATH%"
-    echo FFmpeg added to user PATH
   )
 )
 
@@ -128,8 +103,6 @@ if defined FFMPEG_PATH echo   ffmpeg -version
 echo.
 echo If still not working, restart your computer.
 echo ================================================================
-
-:end
 echo.
 echo Press any key to close...
 pause >nul
