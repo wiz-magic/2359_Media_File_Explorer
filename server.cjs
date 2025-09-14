@@ -1045,8 +1045,7 @@ function buildOptimizedFFmpegCommand(videoPath, thumbnailPath, capabilities) {
     if (capabilities.hwaccel === 'cuda') {
         command += ' -vf "scale_cuda=200:200:force_original_aspect_ratio=decrease,pad_cuda=200:200:(ow-iw)/2:(oh-ih)/2"';
     } else if (capabilities.hwaccel === 'qsv') {
-        // QSV 하드웨어 스케일링 (force_original_aspect_ratio 미지원)
-        command += ' -vf "scale_qsv=200:200"';
+        command += ' -vf "scale_qsv=200:200:force_original_aspect_ratio=decrease"';
     } else if (capabilities.hwaccel === 'opencl') {
         command += ' -vf "hwupload,scale_opencl=200:200:force_original_aspect_ratio=decrease,hwdownload,format=yuv420p,pad=200:200:(ow-iw)/2:(oh-ih)/2"';
     } else {
@@ -1207,6 +1206,7 @@ async function generateImageThumbnail(imagePath) {
         // Check if thumbnail already exists
         try {
             await fs.access(thumbnailPath);
+            console.log(`💾 Cache HIT: ${path.basename(imagePath)} -> ${hash}.jpg`);
             touchCacheFile(thumbnailPath); // 캐시 접근 기록
             return `/api/serve-thumbnail/${hash}.jpg`;
         } catch {
@@ -1253,6 +1253,7 @@ async function generateImageThumbnail(imagePath) {
                 .jpeg({ quality: 85 })
                 .toFile(thumbnailPath);
             
+            console.log(`🆕 Cache MISS: Generated thumbnail for ${path.basename(imagePath)} -> ${hash}.jpg`);
             await recordCacheFile(thumbnailPath); // 캐시 파일 기록
             return `/api/serve-thumbnail/${hash}.jpg`;
         }
