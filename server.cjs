@@ -1082,8 +1082,39 @@ async function generateCacheKey(videoPath, stats) {
     }
 }
 
-// 이미지 파일용 캐시 키 생성 (비디오와 동일한 방식)
+// NAS 환경용 헤더 기반 캐시 키 생성 (범용 호호)
+async function generateHeaderBasedCacheKey(filePath, stats) {
+    try {
+        // 파일의 첫 4KB 읽거
+        const fd = await fs.open(filePath, 'r');
+        const bufferSize = Math.min(4096, stats.size);
+        const buffer = Buffer.alloc(bufferSize);
+        await fd.read(buffer, 0, bufferSize, 0);
+        await fd.close();
+        
+        // 헤더 헤시 + 파일 크기 조합
+        const headerHash = crypto.createHash('md5').update(buffer).digest('hex');
+        return crypto.createHash('md5')
+            .update(`${headerHash}_${stats.size}`)
+            .digest('hex');
+    } catch (error) {
+        console.log(`⚠️ Header hash failed for ${path.basename(filePath)}, using fallback`);
+        // 읽기 실햘 시 기존 방식으로 폴백
+        return crypto.createHash('md5')
+            .update(`${stats.size}_${stats.mtime.getTime()}`)
+            .digest('hex');
+    }
+}
+
+// 이미지 파일용 캐시 키 생성 (비디오와 동일한 방식 + NAS 지원)
 async function generateImageCacheKey(imagePath, stats) {
+    // NAS 환경 감지 (\\\\로 시작하는 경로)
+    if (imagePath.startsWith('\\\\')) {
+        console.log(`🌐 NAS path detected: ${path.basename(imagePath)} - using header-based cache`);
+        return await generateHeaderBasedCacheKey(imagePath, stats);
+    }
+    
+    // 로컬 파일은 기존 방식 유지
     if (process.platform === 'win32') {
         // Windows: 크기 + 수정시간 기반 (inode 제한적 지원)
         return crypto.createHash('md5')
