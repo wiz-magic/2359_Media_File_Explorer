@@ -1074,8 +1074,23 @@ function buildOptimizedFFmpegCommand(videoPath, thumbnailPath, capabilities) {
     return command;
 }
 
-// 파일 고유 식별자 기반 캐시 키 생성 (하이브리드 방식)
+// 비디오 파일용 캐시 키 생성 (파일 고유 식별자 기반)
 async function generateCacheKey(videoPath, stats) {
+    if (process.platform === 'win32') {
+        // Windows: 크기 + 수정시간 기반 (inode 제한적 지원)
+        return crypto.createHash('md5')
+            .update(`${stats.size}_${stats.mtime.getTime()}`)
+            .digest('hex');
+    } else {
+        // Linux/Mac: inode 기반 (파일 시스템 레벨 고유 식별)
+        return crypto.createHash('md5')
+            .update(`${stats.ino}_${stats.dev}_${stats.mtime.getTime()}`)
+            .digest('hex');
+    }
+}
+
+// 이미지 파일용 캐시 키 생성 (비디오와 동일한 방식)
+async function generateImageCacheKey(imagePath, stats) {
     if (process.platform === 'win32') {
         // Windows: 크기 + 수정시간 기반 (inode 제한적 지원)
         return crypto.createHash('md5')
@@ -1208,7 +1223,9 @@ async function generateImageThumbnail(imagePath) {
             return null;
         }
         
-        const hash = crypto.createHash('md5').update(imagePath).digest('hex');
+        // 파일 속성 기반 캐시 키 생성 (비디오 썸네일과 동일한 방식)
+        const stats = await fs.stat(imagePath);
+        const hash = await generateImageCacheKey(imagePath, stats);
         const thumbnailPath = path.join(THUMBNAILS_DIR, `${hash}.jpg`);
         
         // Check if thumbnail already exists
