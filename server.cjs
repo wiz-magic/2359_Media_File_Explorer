@@ -1106,11 +1106,16 @@ async function generateHeaderBasedCacheKey(filePath, stats) {
     }
 }
 
-// 이미지 파일용 캐시 키 생성 (비디오와 동일한 방식 + NAS 지원)
+// NAS 경로 감지 함수
+function isNASPath(filePath) {
+    // UNC 경로 감지: \\\\server\\share 형태
+    return filePath.startsWith('\\\\') && filePath.includes('\\\\', 2);
+}
+
+// 이미지 파일용 캐시 키 생성 (범용 호환성 + NAS 지원)
 async function generateImageCacheKey(imagePath, stats) {
     // NAS 환경 감지 (\\\\로 시작하는 경로)
-    if (imagePath.startsWith('\\\\')) {
-        console.log(`🌐 NAS path detected: ${path.basename(imagePath)} - using header-based cache`);
+    if (isNASPath(imagePath)) {
         return await generateHeaderBasedCacheKey(imagePath, stats);
     }
     

@@ -1090,22 +1090,43 @@ async function generateCacheKey(videoPath, stats) {
 }
 
 // NAS 환경용 헤더 기반 캐시 키 생성 (범용 호환)
+// NAS 경로 감지 함수
+function isNASPath(filePath) {
+    // UNC 경로 감지: \\\\server\\share 형태
+    return filePath.startsWith('\\\\') && filePath.includes('\\\\', 2);
+}
+
+// 파일 헤더 기반 캐시 키 생성 (NAS 환경용)
 async function generateHeaderBasedCacheKey(filePath, stats) {
+    const fileName = path.basename(filePath);
+    const startTime = Date.now();
+    
     try {
+        console.log(`🌐 NAS 파일 헤더 해시 생성: ${fileName} (${(stats.size / 1024).toFixed(1)}KB)`);
+        
         // 파일의 첫 4KB 읽기
         const fd = await fs.open(filePath, 'r');
         const bufferSize = Math.min(4096, stats.size);
         const buffer = Buffer.alloc(bufferSize);
+        
         await fd.read(buffer, 0, bufferSize, 0);
         await fd.close();
         
         // 헤더 해시 + 파일 크기 조합
         const headerHash = crypto.createHash('md5').update(buffer).digest('hex');
-        return crypto.createHash('md5')
+        const finalHash = crypto.createHash('md5')
             .update(`${headerHash}_${stats.size}`)
             .digest('hex');
+            
+        const duration = Date.now() - startTime;
+        console.log(`  → 헤더 해시 완료: ${finalHash.substring(0, 8)}... (${duration}ms)`);
+        return finalHash;
+        
     } catch (error) {
-        console.log(`⚠️ Header hash failed for ${path.basename(filePath)}, using fallback`);
+        const duration = Date.now() - startTime;
+        console.log(`⚠️  NAS 헤더 해시 실패 (${duration}ms): ${fileName} - ${error.message}`);
+        console.log(`→ 기존 방식으로 폴백`);
+        
         // 읽기 실패 시 기존 방식으로 폴백
         return crypto.createHash('md5')
             .update(`${stats.size}_${stats.mtime.getTime()}`)
@@ -1116,8 +1137,7 @@ async function generateHeaderBasedCacheKey(filePath, stats) {
 // 이미지 파일용 캐시 키 생성 (비디오와 동일한 방식 + NAS 지원)
 async function generateImageCacheKey(imagePath, stats) {
     // NAS 환경 감지 (\\\\로 시작하는 경로)
-    if (imagePath.startsWith('\\\\')) {
-        console.log(`🌐 NAS path detected: ${path.basename(imagePath)} - using header-based cache`);
+    if (isNASPath(imagePath)) {
         return await generateHeaderBasedCacheKey(imagePath, stats);
     }
     
