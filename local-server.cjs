@@ -327,21 +327,28 @@ async function cleanupCache() {
 }
 
 // 캐시 파일 기록
-async function recordCacheFile(filePath, size = 0) {
+// 캐시 파일 기록 (원본 파일 경로 기반)
+async function recordCacheFile(originalPath, thumbnailPath, cacheKey, size = 0) {
     try {
         if (size === 0) {
-            const stats = await fs.stat(filePath);
+            const stats = await fs.stat(thumbnailPath);
             size = stats.size;
         }
         
         const metadata = {
+            thumbnailPath: thumbnailPath,
+            thumbnailHash: cacheKey,
+            cacheMethod: isNASPath(originalPath) ? 'header-based' : 'stats-based',
             createdTime: Date.now(),
             accessTime: Date.now(),
             size: size
         };
         
-        cacheMetadata.files.set(filePath, metadata);
+        // 원본 파일 경로를 키로 사용
+        cacheMetadata.files.set(originalPath, metadata);
         cacheMetadata.totalSize += size;
+        
+        console.log(`💾 캐시 매핑 저장: ${path.basename(originalPath)} -> ${cacheKey}.jpg (${metadata.cacheMethod})`);
         
         // 비동기로 메타데이터 저장
         setImmediate(() => saveCacheMetadata());
@@ -351,11 +358,22 @@ async function recordCacheFile(filePath, size = 0) {
     }
 }
 
-// 캐시 파일 접근 기록
-function touchCacheFile(filePath) {
-    const metadata = cacheMetadata.files.get(filePath);
+// 썸네일 해시로 원본 파일 경로 찾기
+function findOriginalPathByHash(thumbnailHash) {
+    for (const [originalPath, metadata] of cacheMetadata.files.entries()) {
+        if (metadata.thumbnailHash === thumbnailHash) {
+            return originalPath;
+        }
+    }
+    return null;
+}
+
+// 캐시 파일 접근 기록 (원본 파일 경로 기반)
+function touchCacheFile(originalPath) {
+    const metadata = cacheMetadata.files.get(originalPath);
     if (metadata) {
         metadata.accessTime = Date.now();
+        console.log(`👆 캐시 접근 기록: ${path.basename(originalPath)}`);
         // 즉시 저장하지 않고 배치로 처리 (성능상 이유)
     }
 }
@@ -1193,7 +1211,7 @@ async function generateVideoThumbnail(videoPath) {
             const totalTime = Date.now() - startTime;
             
             // 생성된 캐시 파일 기록
-            await recordCacheFile(thumbnailPath);
+            await recordCacheFile(videoPath, thumbnailPath, cacheKey);
             
             console.log(`✅ Thumbnail generated: ${path.basename(videoPath)} (${totalTime}ms)`);
             console.log(`   - Hardware: ${capabilities.hwaccel || 'CPU'}`);
@@ -1247,7 +1265,7 @@ async function generateVideoThumbnail(videoPath) {
                 const totalTime = Date.now() - startTime;
                 
                 // 생성된 캐시 파일 기록
-                await recordCacheFile(thumbnailPath);
+                await recordCacheFile(videoPath, thumbnailPath, cacheKey);
                 
                 console.log(`✅ Fallback successful: ${path.basename(videoPath)} (${totalTime}ms)`);
                 console.log(`   - Used: Basic CPU encoding (fallback mode)`);
@@ -1279,12 +1297,25 @@ async function generateImageThumbnail(imagePath) {
         const hash = await generateImageCacheKey(imagePath, stats);
         const thumbnailPath = path.join(THUMBNAILS_DIR, `${hash}.jpg`);
         
-        // Check if thumbnail already exists
+        // 캐시 확인: 원본 파일 경로로 검색
+        const cachedInfo = cacheMetadata.files.get(imagePath);
+        if (cachedInfo && cachedInfo.thumbnailHash === hash) {
+            try {
+                // 실제 썸네일 파일 존재 확인
+                await fs.access(cachedInfo.thumbnailPath);
+                console.log(`🟢 캐시 HIT: ${path.basename(imagePath)} -> ${hash}.jpg (${cachedInfo.cacheMethod})`);
+                touchCacheFile(imagePath); // 캐시 접근 기록
+                return `/api/serve-thumbnail/${hash}.jpg`;
+            } catch {
+                // 썸네일 파일이 삭제된 경우 캐시 엔트리 제거
+                console.log(`⚠️ 캐시 엔트리 제거: ${path.basename(imagePath)} (썸네일 파일 없음)`);
+                cacheMetadata.files.delete(imagePath);
+            }
+        }
+        
+        // 캐시 MISS - 새로 생성
+        console.log(`🔴 캐시 MISS: ${path.basename(imagePath)} - 새로 생성`);
         try {
-            await fs.access(thumbnailPath);
-            touchCacheFile(thumbnailPath); // 캐시 접근 기록
-            return `/api/serve-thumbnail/${hash}.jpg`;
-        } catch {
             // HEIC 파일 처리
             if (ext === '.heic' || ext === '.heif') {
                 try {
@@ -1297,7 +1328,8 @@ async function generateImageThumbnail(imagePath) {
                         .jpeg({ quality: 85 })
                         .toFile(thumbnailPath);
                     
-                    await recordCacheFile(thumbnailPath); // 캐시 파일 기록
+                    await recordCacheFile(imagePath, thumbnailPath, hash); // 캐시 파일 기록
+                    console.log(`✅ HEIC 썸네일 생성 완료: ${path.basename(imagePath)}`);
                     return `/api/serve-thumbnail/${hash}.jpg`;
                 } catch (heicError) {
                     console.log('HEIC thumbnail generation failed, trying with sips (macOS) or convert...');
@@ -1308,7 +1340,7 @@ async function generateImageThumbnail(imagePath) {
                             const tempPath = thumbnailPath.replace('.jpg', '_temp.jpg');
                             await execPromise(`sips -s format jpeg "${imagePath}" --out "${tempPath}" --resampleHeightWidthMax 200`);
                             await fs.rename(tempPath, thumbnailPath);
-                            await recordCacheFile(thumbnailPath); // 캐시 파일 기록
+                            await recordCacheFile(imagePath, thumbnailPath, hash); // 캐시 파일 기록
                             return `/api/serve-thumbnail/${hash}.jpg`;
                         } catch (sipsError) {
                             console.error('HEIC conversion with sips failed:', sipsError.message);
@@ -1328,7 +1360,8 @@ async function generateImageThumbnail(imagePath) {
                 .jpeg({ quality: 85 })
                 .toFile(thumbnailPath);
             
-            await recordCacheFile(thumbnailPath); // 캐시 파일 기록
+            await recordCacheFile(imagePath, thumbnailPath, hash); // 캐시 파일 기록
+            console.log(`✅ 일반 이미지 썸네일 생성 완료: ${path.basename(imagePath)}`);
             return `/api/serve-thumbnail/${hash}.jpg`;
         }
     } catch (error) {
@@ -1636,8 +1669,12 @@ app.get('/api/serve-thumbnail/:filename', async (req, res) => {
     try {
         await fs.access(thumbnailPath);
         
-        // 캐시 접근 기록
-        touchCacheFile(thumbnailPath);
+        // 캐시 접근 기록 (썸네일 해시로 원본 경로 찾기)
+        const thumbnailHash = path.basename(filename, '.jpg');
+        const originalPath = findOriginalPathByHash(thumbnailHash);
+        if (originalPath) {
+            touchCacheFile(originalPath);
+        }
         
         // 캐시 헤더 설정 (1주일)
         res.set({
@@ -1659,8 +1696,12 @@ app.get('/api/serve-video-thumbnail/:filename', async (req, res) => {
     try {
         await fs.access(thumbnailPath);
         
-        // 캐시 접근 기록
-        touchCacheFile(thumbnailPath);
+        // 캐시 접근 기록 (썸네일 해시로 원본 경로 찾기)
+        const thumbnailHash = path.basename(filename, '.jpg');
+        const originalPath = findOriginalPathByHash(thumbnailHash);
+        if (originalPath) {
+            touchCacheFile(originalPath);
+        }
         
         // 캐시 헤더 설정 (1주일)
         res.set({
